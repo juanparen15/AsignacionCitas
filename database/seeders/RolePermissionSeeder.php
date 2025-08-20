@@ -26,7 +26,7 @@ class RolePermissionSeeder extends Seeder
                 'description' => 'Ver la lista de usuarios del sistema',
                 'group' => 'usuarios'
             ],
-            
+
             // Gestión de roles
             [
                 'name' => 'manage_roles',
@@ -40,7 +40,7 @@ class RolePermissionSeeder extends Seeder
                 'description' => 'Asignar y remover roles a usuarios',
                 'group' => 'roles'
             ],
-            
+
             // Gestión de citas
             [
                 'name' => 'view_all_citas',
@@ -66,7 +66,7 @@ class RolePermissionSeeder extends Seeder
                 'description' => 'Exportar reportes y listados de citas',
                 'group' => 'citas'
             ],
-            
+
             // Configuración del sistema
             [
                 'name' => 'manage_secretarias',
@@ -92,7 +92,7 @@ class RolePermissionSeeder extends Seeder
                 'description' => 'Configurar horarios, días y restricciones de trámites',
                 'group' => 'configuracion'
             ],
-            
+
             // Reportes y estadísticas
             [
                 'name' => 'view_reports',
@@ -106,7 +106,7 @@ class RolePermissionSeeder extends Seeder
                 'description' => 'Ver dashboard con métricas y análisis',
                 'group' => 'reportes'
             ],
-            
+
             // Administración del sistema
             [
                 'name' => 'system_settings',
@@ -142,10 +142,18 @@ class RolePermissionSeeder extends Seeder
                 'display_name' => 'Administrador',
                 'description' => 'Administrador general con acceso a la mayoría de funciones',
                 'permissions' => [
-                    'view_users', 'manage_users', 'assign_roles',
-                    'view_all_citas', 'manage_citas', 'export_citas',
-                    'manage_secretarias', 'manage_areas', 'manage_tramites', 'manage_configuracion',
-                    'view_reports', 'view_analytics'
+                    'view_users',
+                    'manage_users',
+                    'assign_roles',
+                    'view_all_citas',
+                    'manage_citas',
+                    'export_citas',
+                    'manage_secretarias',
+                    'manage_areas',
+                    'manage_tramites',
+                    'manage_configuracion',
+                    'view_reports',
+                    'view_analytics'
                 ]
             ],
             [
@@ -154,8 +162,11 @@ class RolePermissionSeeder extends Seeder
                 'description' => 'Responsable de un área específica y sus citas',
                 'permissions' => [
                     'view_users',
-                    'view_area_citas', 'manage_citas', 'export_citas',
-                    'manage_tramites', 'manage_configuracion',
+                    'view_area_citas',
+                    'manage_citas',
+                    'export_citas',
+                    'manage_tramites',
+                    'manage_configuracion',
                     'view_reports'
                 ]
             ],
@@ -164,7 +175,8 @@ class RolePermissionSeeder extends Seeder
                 'display_name' => 'Operador',
                 'description' => 'Usuario operativo que gestiona citas de su área',
                 'permissions' => [
-                    'view_area_citas', 'manage_citas',
+                    'view_area_citas',
+                    'manage_citas',
                     'view_reports'
                 ]
             ],
@@ -181,7 +193,8 @@ class RolePermissionSeeder extends Seeder
                 'display_name' => 'Recepcionista',
                 'description' => 'Encargado de la atención y confirmación de citas',
                 'permissions' => [
-                    'view_area_citas', 'manage_citas'
+                    'view_area_citas',
+                    'manage_citas'
                 ]
             ]
         ];
@@ -189,15 +202,24 @@ class RolePermissionSeeder extends Seeder
         foreach ($roles as $roleData) {
             $permissions = $roleData['permissions'];
             unset($roleData['permissions']);
-            
+
             $role = Role::firstOrCreate(
                 ['name' => $roleData['name']],
                 $roleData
             );
 
-            // Asignar permisos al rol
-            $permissionIds = Permission::whereIn('name', $permissions)->pluck('id');
-            $role->permissions()->sync($permissionIds);
+            // Verificar que los permisos existen antes de asignar
+            $validPermissions = Permission::whereIn('name', $permissions)->pluck('id')->toArray();
+
+            if (count($validPermissions) !== count($permissions)) {
+                $missingPermissions = array_diff($permissions, Permission::whereIn('name', $permissions)->pluck('name')->toArray());
+                $this->command->warn("Advertencia: Los siguientes permisos no existen para el rol {$role->name}: " . implode(', ', $missingPermissions));
+            }
+
+            // Sincronizar solo permisos válidos
+            $role->permissions()->sync($validPermissions);
+
+            $this->command->info("Rol '{$role->display_name}' creado/actualizado con " . count($validPermissions) . " permisos.");
         }
 
         $this->command->info('Roles y permisos creados exitosamente.');

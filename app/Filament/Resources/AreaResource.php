@@ -11,6 +11,8 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
 
 class AreaResource extends Resource
 {
@@ -100,7 +102,18 @@ class AreaResource extends Resource
                     ->native(false),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_areas') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_areas') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_areas') || 
+                                            Auth::user()->hasRole('super_admin'))
+                    ->requiresConfirmation(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -110,12 +123,36 @@ class AreaResource extends Resource
             ->defaultSort('orden');
     }
 
-    public static function getRelations(): array
+    public static function canViewAny(): bool
     {
-        return [
-            //
-        ];
+        return Auth::user()->hasPermission('manage_areas') || 
+               Auth::user()->hasRole('super_admin');
     }
+
+    public static function canCreate(): bool
+    {
+        return Auth::user()->hasPermission('manage_areas') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return Auth::user()->hasPermission('manage_areas') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return Auth::user()->hasPermission('manage_areas') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return Auth::user()->hasPermission('manage_areas') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
 
     public static function getPages(): array
     {

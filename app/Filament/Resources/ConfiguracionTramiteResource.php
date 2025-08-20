@@ -11,6 +11,8 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
 
 class ConfiguracionTramiteResource extends Resource
 {
@@ -208,7 +210,18 @@ class ConfiguracionTramiteResource extends Resource
                     ->preload(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_configuracion') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_configuracion') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_configuracion') || 
+                                            Auth::user()->hasRole('super_admin'))
+                    ->requiresConfirmation(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -217,12 +230,36 @@ class ConfiguracionTramiteResource extends Resource
             ]);
     }
 
-    public static function getRelations(): array
+    public static function canViewAny(): bool
     {
-        return [
-            //
-        ];
+        return Auth::user()->hasPermission('manage_configuracion') || 
+               Auth::user()->hasRole('super_admin');
     }
+
+    public static function canCreate(): bool
+    {
+        return Auth::user()->hasPermission('manage_configuracion') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return Auth::user()->hasPermission('manage_configuracion') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return Auth::user()->hasPermission('manage_configuracion') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return Auth::user()->hasPermission('manage_configuracion') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
 
     public static function getPages(): array
     {

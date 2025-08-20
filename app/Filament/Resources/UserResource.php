@@ -14,6 +14,8 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
 
 class UserResource extends Resource
 {
@@ -36,36 +38,36 @@ class UserResource extends Resource
                             ->required()
                             ->maxLength(255)
                             ->columnSpan(2),
-                        
+
                         Forms\Components\TextInput::make('email')
                             ->label('Correo Electrónico')
                             ->email()
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->maxLength(255),
-                        
+
                         Forms\Components\TextInput::make('phone')
                             ->label('Teléfono')
                             ->tel()
                             ->maxLength(20)
                             ->placeholder('300 123 4567'),
-                        
+
                         Forms\Components\TextInput::make('password')
                             ->label('Contraseña')
                             ->password()
-                            ->dehydrateStateUsing(fn ($state) => Hash::make($state))
-                            ->dehydrated(fn ($state) => filled($state))
-                            ->required(fn (string $context): bool => $context === 'create')
+                            ->dehydrateStateUsing(fn($state) => Hash::make($state))
+                            ->dehydrated(fn($state) => filled($state))
+                            ->required(fn(string $context): bool => $context === 'create')
                             ->minLength(8)
                             ->maxLength(255)
                             ->helperText('Mínimo 8 caracteres. Dejar vacío para mantener la actual.')
                             ->columnSpan(2),
-                        
+
                         Forms\Components\Toggle::make('active')
                             ->label('Usuario Activo')
                             ->default(true)
                             ->helperText('Solo los usuarios activos pueden acceder al sistema'),
-                        
+
                         Forms\Components\DateTimePicker::make('email_verified_at')
                             ->label('Email Verificado')
                             ->helperText('Fecha y hora de verificación del email')
@@ -81,16 +83,24 @@ class UserResource extends Resource
                             ->options(Area::active()->with('secretaria')->get()->mapWithKeys(function ($area) {
                                 return [$area->id => $area->secretaria->nombre . ' - ' . $area->nombre];
                             }))
+                            ->visible(
+                                fn(User $record): bool => (Auth::user()->hasPermission('manage_roles') || Auth::user()->hasRole('super_admin')) &&
+                                    Auth::user()->id !== $record->id // No puede desactivarse a sí mismo
+                            )
                             ->searchable()
                             ->preload()
                             ->helperText('Área a la que pertenece el usuario (opcional)')
                             ->columnSpanFull(),
-                        
+
                         Forms\Components\CheckboxList::make('roles')
                             ->label('Roles Asignados')
                             ->relationship('roles', 'display_name')
                             ->options(Role::active()->pluck('display_name', 'id'))
                             ->descriptions(Role::active()->pluck('description', 'id')->filter()->toArray())
+                            ->visible(
+                                fn(User $record): bool => (Auth::user()->hasPermission('manage_roles') || Auth::user()->hasRole('super_admin')) &&
+                                    Auth::user()->id !== $record->id // No puede desactivarse a sí mismo
+                            )
                             ->columns(2)
                             ->columnSpanFull()
                             ->helperText('Seleccione uno o más roles para el usuario'),
@@ -117,20 +127,20 @@ class UserResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->weight('medium'),
-                
+
                 Tables\Columns\TextColumn::make('email')
                     ->label('Correo')
                     ->searchable()
                     ->sortable()
                     ->copyable()
                     ->icon('heroicon-m-envelope'),
-                
+
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Teléfono')
                     ->searchable()
                     ->toggleable()
                     ->icon('heroicon-m-phone'),
-                
+
                 Tables\Columns\TextColumn::make('area.secretaria.nombre')
                     ->label('Secretaría')
                     ->searchable()
@@ -138,30 +148,30 @@ class UserResource extends Resource
                     ->toggleable()
                     ->color('primary')
                     ->weight('medium'),
-                
+
                 Tables\Columns\TextColumn::make('area.nombre')
                     ->label('Área')
                     ->searchable()
                     ->sortable()
                     ->color('success'),
-                
+
                 Tables\Columns\TextColumn::make('display_roles')
                     ->label('Roles')
                     ->badge()
                     ->separator(',')
                     ->color('warning'),
-                
+
                 Tables\Columns\IconColumn::make('email_verified_at')
                     ->label('Verificado')
                     ->boolean()
                     ->sortable()
                     ->toggleable(),
-                
+
                 Tables\Columns\IconColumn::make('active')
                     ->label('Activo')
                     ->boolean()
                     ->sortable(),
-                
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Registrado')
                     ->dateTime('d/m/Y')
@@ -175,14 +185,14 @@ class UserResource extends Resource
                     ->trueLabel('Solo activos')
                     ->falseLabel('Solo inactivos')
                     ->native(false),
-                
+
                 Tables\Filters\TernaryFilter::make('email_verified_at')
                     ->label('Email Verificado')
                     ->boolean()
                     ->trueLabel('Solo verificados')
                     ->falseLabel('Solo no verificados')
                     ->native(false),
-                
+
                 Tables\Filters\SelectFilter::make('area_id')
                     ->label('Área')
                     ->options(Area::active()->with('secretaria')->get()->mapWithKeys(function ($area) {
@@ -190,7 +200,7 @@ class UserResource extends Resource
                     }))
                     ->searchable()
                     ->preload(),
-                
+
                 Tables\Filters\SelectFilter::make('roles')
                     ->label('Rol')
                     ->relationship('roles', 'display_name')
@@ -199,9 +209,19 @@ class UserResource extends Resource
                     ->multiple(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                
+                Tables\Actions\ViewAction::make()
+                    ->visible(fn(): bool => Auth::user()->hasPermission('view_users') ||
+                        Auth::user()->hasPermission('manage_users') ||
+                        Auth::user()->hasRole('super_admin')),
+
+                Tables\Actions\EditAction::make()
+                    ->visible(
+                        fn(User $record): bool =>
+                        Auth::user()->hasPermission('manage_users') ||
+                            Auth::user()->hasRole('super_admin') ||
+                            Auth::user()->id === $record->id // Puede editar su propio perfil
+                    ),
+
                 Tables\Actions\Action::make('verify_email')
                     ->label('Verificar Email')
                     ->icon('heroicon-o-check-badge')
@@ -209,23 +229,41 @@ class UserResource extends Resource
                     ->action(function (User $record) {
                         $record->markEmailAsVerified();
                     })
-                    ->visible(fn (User $record): bool => !$record->hasVerifiedEmail())
+                    ->visible(
+                        fn(User $record): bool =>
+                        !$record->hasVerifiedEmail() &&
+                            (Auth::user()->hasPermission('manage_users') || Auth::user()->hasRole('super_admin'))
+                    )
                     ->requiresConfirmation(),
-                
+
                 Tables\Actions\Action::make('toggle_status')
-                    ->label(fn (User $record): string => $record->active ? 'Desactivar' : 'Activar')
-                    ->icon(fn (User $record): string => $record->active ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle')
-                    ->color(fn (User $record): string => $record->active ? 'danger' : 'success')
+                    ->label(fn(User $record): string => $record->active ? 'Desactivar' : 'Activar')
+                    ->icon(fn(User $record): string => $record->active ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle')
+                    ->color(fn(User $record): string => $record->active ? 'danger' : 'success')
                     ->action(function (User $record) {
                         $record->update(['active' => !$record->active]);
                     })
+                    ->visible(
+                        fn(User $record): bool => (Auth::user()->hasPermission('manage_users') || Auth::user()->hasRole('super_admin')) &&
+                            Auth::user()->id !== $record->id // No puede desactivarse a sí mismo
+                    )
+                    ->requiresConfirmation(),
+
+                Tables\Actions\DeleteAction::make()
+                    ->visible(
+                        fn(User $record): bool => (Auth::user()->hasPermission('manage_users') || Auth::user()->hasRole('super_admin')) &&
+                            Auth::user()->id !== $record->id && // No puede eliminarse a sí mismo
+                            (!$record->hasRole('super_admin') || Auth::user()->hasRole('super_admin')) // Solo super admin puede eliminar super admin
+                    )
                     ->requiresConfirmation(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
-                        ->requiresConfirmation(),
-                    
+                        ->requiresConfirmation()
+                        ->visible(fn(): bool => Auth::user()->hasPermission('manage_users') ||
+                            Auth::user()->hasRole('super_admin')),
+
                     Tables\Actions\BulkAction::make('activate')
                         ->label('Activar Seleccionados')
                         ->icon('heroicon-o-check-circle')
@@ -233,17 +271,23 @@ class UserResource extends Resource
                         ->action(function ($records) {
                             $records->each->update(['active' => true]);
                         })
+                        ->visible(fn(): bool => Auth::user()->hasPermission('manage_users') ||
+                            Auth::user()->hasRole('super_admin'))
                         ->requiresConfirmation(),
-                    
+
                     Tables\Actions\BulkAction::make('deactivate')
                         ->label('Desactivar Seleccionados')
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
                         ->action(function ($records) {
-                            $records->each->update(['active' => false]);
+                            // Filtrar para no desactivar al usuario actual
+                            $records->filter(fn($record) => $record->id !== Auth::id())
+                                ->each->update(['active' => false]);
                         })
+                        ->visible(fn(): bool => Auth::user()->hasPermission('manage_users') ||
+                            Auth::user()->hasRole('super_admin'))
                         ->requiresConfirmation(),
-                ]),
+                ])
             ])
             ->defaultSort('created_at', 'desc');
     }
@@ -263,6 +307,64 @@ class UserResource extends Resource
             'view' => Pages\ViewUser::route('/{record}'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
+    }
+
+    public static function canViewAny(): bool
+    {
+        return Auth::user()->hasPermission('view_users') ||
+            Auth::user()->hasPermission('manage_users') ||
+            Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canCreate(): bool
+    {
+        return Auth::user()->hasPermission('manage_users') ||
+            Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        $user = Auth::user();
+
+        // Super admin puede editar todo
+        if ($user->hasRole('super_admin')) {
+            return true;
+        }
+
+        // Los usuarios pueden editar su propio perfil
+        if ($user->id === $record->id) {
+            return true;
+        }
+
+        // No se puede editar a un super admin a menos que seas super admin
+        if ($record->hasRole('super_admin') && !$user->hasRole('super_admin')) {
+            return false;
+        }
+
+        return $user->hasPermission('manage_users');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        $user = Auth::user();
+
+        // No se puede borrar a sí mismo
+        if ($user->id === $record->id) {
+            return false;
+        }
+
+        // Solo super admin puede borrar super admins
+        if ($record->hasRole('super_admin') && !$user->hasRole('super_admin')) {
+            return false;
+        }
+
+        return $user->hasPermission('manage_users') || $user->hasRole('super_admin');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return Auth::user()->hasPermission('manage_users') ||
+            Auth::user()->hasRole('super_admin');
     }
 
     public static function getEloquentQuery(): Builder

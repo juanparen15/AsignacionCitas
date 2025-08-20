@@ -65,6 +65,8 @@ class ManageRoles extends Page implements HasForms
             if ($role) {
                 $this->rolePermissions = $role->permissions->pluck('id')->toArray();
             }
+        } else {
+            $this->rolePermissions = [];
         }
     }
 
@@ -79,24 +81,34 @@ class ManageRoles extends Page implements HasForms
             return;
         }
 
-        $role = Role::find($this->selectedRole);
-        
-        if (!$role) {
+        try {
+            $role = Role::find($this->selectedRole);
+            
+            if (!$role) {
+                Notification::make()
+                    ->title('Error')
+                    ->body('Rol no encontrado.')
+                    ->danger()
+                    ->send();
+                return;
+            }
+
+            // Sincronizar permisos
+            $role->permissions()->sync($this->rolePermissions);
+
+            Notification::make()
+                ->title('Éxito')
+                ->body("Permisos actualizados para el rol {$role->display_name}.")
+                ->success()
+                ->send();
+
+        } catch (\Exception $e) {
             Notification::make()
                 ->title('Error')
-                ->body('Rol no encontrado.')
+                ->body('Ocurrió un error al guardar los permisos: ' . $e->getMessage())
                 ->danger()
                 ->send();
-            return;
         }
-
-        $role->permissions()->sync($this->rolePermissions);
-
-        Notification::make()
-            ->title('Éxito')
-            ->body("Permisos actualizados para el rol {$role->display_name}.")
-            ->success()
-            ->send();
     }
 
     public function getRoles(): array

@@ -14,6 +14,8 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Forms\Get;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
 
 class TramiteResource extends Resource
 {
@@ -172,14 +174,29 @@ class TramiteResource extends Resource
                     ->native(false),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_tramites') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_tramites') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_tramites') || 
+                                            Auth::user()->hasRole('super_admin'))
+                    ->requiresConfirmation(),
+                
                 Tables\Actions\Action::make('configurar')
                     ->label('Configurar')
                     ->icon('heroicon-o-cog-6-tooth')
                     ->url(fn (Tramite $record): string => 
                         route('filament.admin.resources.configuracion-tramites.edit', $record->configuracion)
                     )
-                    ->visible(fn (Tramite $record): bool => $record->configuracion !== null),
+                    ->visible(fn (Tramite $record): bool => 
+                        $record->configuracion !== null &&
+                        (Auth::user()->hasPermission('manage_configuracion') || Auth::user()->hasRole('super_admin'))
+                    ),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -189,11 +206,34 @@ class TramiteResource extends Resource
             ->defaultSort('orden');
     }
 
-    public static function getRelations(): array
+    public static function canViewAny(): bool
     {
-        return [
-            //
-        ];
+        return Auth::user()->hasPermission('manage_tramites') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canCreate(): bool
+    {
+        return Auth::user()->hasPermission('manage_tramites') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return Auth::user()->hasPermission('manage_tramites') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return Auth::user()->hasPermission('manage_tramites') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return Auth::user()->hasPermission('manage_tramites') || 
+               Auth::user()->hasRole('super_admin');
     }
 
     public static function getPages(): array

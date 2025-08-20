@@ -9,6 +9,8 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
 class RoleResource extends Resource
 {
@@ -32,19 +34,22 @@ class RoleResource extends Resource
                             ->unique(ignoreRecord: true)
                             ->maxLength(255)
                             ->helperText('Nombre único del rol (sin espacios, en minúsculas)')
-                            ->rules(['regex:/^[a-z_]+$/']),
+                            ->rules(['regex:/^[a-z_]+$/'])
+                            ->placeholder('ej: coordinador_area'),
                         
                         Forms\Components\TextInput::make('display_name')
                             ->label('Nombre Mostrado')
                             ->required()
                             ->maxLength(255)
-                            ->helperText('Nombre que se mostrará en la interfaz'),
+                            ->helperText('Nombre que se mostrará en la interfaz')
+                            ->placeholder('ej: Coordinador de Área'),
                         
                         Forms\Components\Textarea::make('description')
                             ->label('Descripción')
                             ->rows(3)
                             ->columnSpanFull()
-                            ->helperText('Descripción detallada del rol y sus funciones'),
+                            ->helperText('Descripción detallada del rol y sus funciones')
+                            ->placeholder('Describe las responsabilidades de este rol...'),
                         
                         Forms\Components\Toggle::make('active')
                             ->label('Activo')
@@ -53,33 +58,34 @@ class RoleResource extends Resource
                     ])
                     ->columns(2),
 
-                Forms\Components\Section::make('Permisos')
+                Forms\Components\Section::make('Permisos del Sistema')
+                    ->description('Seleccione los permisos que tendrá este rol')
                     ->schema([
                         Forms\Components\CheckboxList::make('permissions')
-                            ->label('Permisos Asignados')
+                            ->label('Permisos Disponibles')
                             ->relationship('permissions', 'display_name')
                             ->options(function () {
                                 return Permission::active()
                                     ->orderBy('group')
                                     ->orderBy('display_name')
                                     ->get()
-                                    ->groupBy('group')
-                                    ->map(function ($permissions, $group) {
-                                        return $permissions->pluck('display_name', 'id')->toArray();
+                                    ->mapWithKeys(function ($permission) {
+                                        return [$permission->id => "[{$permission->group}] {$permission->display_name}"];
                                     })
-                                    ->flatten()
                                     ->toArray();
                             })
                             ->descriptions(function () {
                                 return Permission::active()
+                                    ->whereNotNull('description')
+                                    ->where('description', '!=', '')
                                     ->pluck('description', 'id')
-                                    ->filter()
                                     ->toArray();
                             })
-                            ->columns(2)
+                            ->columns(1)
                             ->columnSpanFull()
                             ->searchable()
-                            ->bulkToggleable(),
+                            ->bulkToggleable()
+                            ->gridDirection('row'),
                     ]),
             ]);
     }
@@ -92,7 +98,8 @@ class RoleResource extends Resource
                     ->label('Nombre')
                     ->searchable()
                     ->sortable()
-                    ->weight('medium'),
+                    ->weight('medium')
+                    ->description(fn (Role $record): string => $record->description ?? ''),
                 
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nombre Interno')
@@ -100,7 +107,8 @@ class RoleResource extends Resource
                     ->sortable()
                     ->toggleable()
                     ->fontFamily('mono')
-                    ->color('gray'),
+                    ->color('gray')
+                    ->copyable(),
                 
                 Tables\Columns\TextColumn::make('users_count')
                     ->label('Usuarios')
@@ -134,22 +142,50 @@ class RoleResource extends Resource
                     ->trueLabel('Solo activos')
                     ->falseLabel('Solo inactivos')
                     ->native(false),
+                
+                Tables\Filters\Filter::make('has_users')
+                    ->label('Con usuarios asignados')
+                    ->query(fn ($query) => $query->has('users'))
+                    ->toggle(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_roles') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (): bool => Auth::user()->hasPermission('manage_roles') || 
+                                            Auth::user()->hasRole('super_admin')),
+                
                 Tables\Actions\DeleteAction::make()
                     ->requiresConfirmation()
                     ->modalDescription('¿Está seguro de eliminar este rol? Esta acción no se puede deshacer.')
-                    ->modalSubmitActionLabel('Sí, eliminar'),
+                    ->modalSubmitActionLabel('Sí, eliminar')
+                    ->visible(fn (Role $record): bool => 
+                        $record->users()->count() === 0 &&
+                        (Auth::user()->hasPermission('manage_roles') || Auth::user()->hasRole('super_admin'))
+                    )
+                    ->before(function (Role $record) {
+                        if ($record->users()->count() > 0) {
+                            throw new \Exception('No se puede eliminar un rol que tiene usuarios asignados.');
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
-                        ->requiresConfirmation(),
+                        ->requiresConfirmation()
+                        ->before(function ($records) {
+                            foreach ($records as $record) {
+                                if ($record->users()->count() > 0) {
+                                    throw new \Exception("No se puede eliminar el rol '{$record->display_name}' porque tiene usuarios asignados.");
+                                }
+                            }
+                        }),
                 ]),
             ])
-            ->defaultSort('display_name');
+            ->defaultSort('display_name')
+            ->striped();
     }
 
     public static function getRelations(): array
@@ -167,5 +203,36 @@ class RoleResource extends Resource
             'view' => Pages\ViewRole::route('/{record}'),
             'edit' => Pages\EditRole::route('/{record}/edit'),
         ];
+    }
+
+    public static function canViewAny(): bool
+    {
+        return Auth::user()->hasPermission('manage_roles') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canCreate(): bool
+    {
+        return Auth::user()->hasPermission('manage_roles') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return Auth::user()->hasPermission('manage_roles') || 
+               Auth::user()->hasRole('super_admin');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        // No permitir eliminar roles que tienen usuarios asignados
+        return ($record->users()->count() === 0) && 
+               (Auth::user()->hasPermission('manage_roles') || Auth::user()->hasRole('super_admin'));
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return Auth::user()->hasPermission('manage_roles') || 
+               Auth::user()->hasRole('super_admin');
     }
 }

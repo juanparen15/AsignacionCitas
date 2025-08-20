@@ -102,8 +102,13 @@ class Cita extends Model
     {
         static::creating(function ($cita) {
             $cita->numero_cita = static::generarNumeroCita();
-            $cita->fecha_hora_cita = Carbon::parse($cita->fecha_cita->format('Y-m-d') . ' ' . $cita->hora_cita->format('H:i:s'));
-            $cita->ip_creacion = request()->ip();
+
+            // Solo generar fecha_hora_cita si no se ha establecido
+            if (!$cita->fecha_hora_cita) {
+                $cita->fecha_hora_cita = Carbon::parse($cita->fecha_cita . ' ' . $cita->hora_cita);
+            }
+
+            $cita->ip_creacion = $cita->ip_creacion ?? request()->ip();
         });
     }
 

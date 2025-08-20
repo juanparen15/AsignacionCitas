@@ -111,7 +111,7 @@ class CitasChart extends ChartWidget
             'plugins' => [
                 'legend' => [
                     'display' => true,
-                    'position' => 'bottom',
+                    'position' => 'left',
                 ],
                 'tooltip' => [
                     'mode' => 'index',

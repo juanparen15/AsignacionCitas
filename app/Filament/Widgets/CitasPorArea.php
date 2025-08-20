@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class CitasPorArea extends ChartWidget
 {
-    protected static ?string $heading = 'Distribución de Citas por Área';
+    protected static ?string $heading = 'Distribución de Citas';
     protected static ?int $sort = 4;
     protected static ?string $pollingInterval = '120s';
     protected static ?string $maxHeight = '350px';
@@ -35,14 +35,14 @@ class CitasPorArea extends ChartWidget
     protected function getData(): array
     {
         $user = Auth::user();
-        
+
         // Si el usuario solo puede ver su área, mostrar solo esa área
         if (!$user->canViewAllCitas() && $user->area_id) {
             return $this->getAreaSpecificData($user->area_id);
         }
-        
+
         $dateRange = $this->getDateRange();
-        
+
         $data = Cita::query()
             ->join('tramites', 'citas.tramite_id', '=', 'tramites.id')
             ->join('areas', 'tramites.area_id', '=', 'areas.id')
@@ -50,12 +50,12 @@ class CitasPorArea extends ChartWidget
             ->select('areas.nombre', DB::raw('count(*) as total'))
             ->groupBy('areas.id', 'areas.nombre')
             ->orderBy('total', 'desc')
-            ->limit(10) // Top 10 áreas
+            // ->limit(10) // Top 10 áreas
             ->get();
 
         $labels = $data->pluck('nombre')->toArray();
         $values = $data->pluck('total')->toArray();
-        
+
         // Generar colores dinámicos
         $colors = $this->generateColors(count($labels));
 
@@ -76,7 +76,7 @@ class CitasPorArea extends ChartWidget
     {
         $area = Area::find($areaId);
         $dateRange = $this->getDateRange();
-        
+
         $estadosCitas = Cita::query()
             ->whereHas('tramite', fn($q) => $q->where('area_id', $areaId))
             ->whereBetween('fecha_cita', $dateRange)
@@ -87,7 +87,7 @@ class CitasPorArea extends ChartWidget
         $labels = [];
         $values = [];
         $colors = [];
-        
+
         $colorMap = [
             'programada' => '#f59e0b',
             'confirmada' => '#3b82f6',
@@ -129,15 +129,23 @@ class CitasPorArea extends ChartWidget
     private function generateColors(int $count): array
     {
         $baseColors = [
-            '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
-            '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
+            '#3b82f6',
+            '#ef4444',
+            '#10b981',
+            '#f59e0b',
+            '#8b5cf6',
+            '#ec4899',
+            '#14b8a6',
+            '#f97316',
+            '#6366f1',
+            '#84cc16',
         ];
-        
+
         $colors = [];
         for ($i = 0; $i < $count; $i++) {
             $colors[] = $baseColors[$i % count($baseColors)];
         }
-        
+
         return $colors;
     }
 
@@ -168,24 +176,29 @@ class CitasPorArea extends ChartWidget
                     ],
                 ],
             ],
+            'interaction' => [
+                'mode' => 'nearest',
+                'axis' => 'x',
+                'intersect' => false,
+            ],
         ];
     }
 
-    // protected function getHeading(): string
-    // {
-    //     $user = Auth::user();
-        
-    //     if (!$user->canViewAllCitas() && $user->area_id) {
-    //         $area = Area::find($user->area_id);
-    //         return "Estados de Citas - {$area->nombre}";
-    //     }
-        
-    //     return 'Distribución de Citas por Área';
-    // }
+    public function getHeading(): string
+    {
+        $user = Auth::user();
+
+        if (!$user->canViewAllCitas() && $user->area_id) {
+            $area = Area::find($user->area_id);
+            return "Estados de Citas - {$area->nombre}";
+        }
+
+        return 'Distribución de Citas por Área';
+    }
 
     public static function canView(): bool
     {
-        return Auth::user()->hasPermission('view_analytics') || 
-               Auth::user()->hasPermission('view_area_citas');
+        return Auth::user()->hasPermission('view_analytics') ||
+            Auth::user()->hasPermission('view_area_citas');
     }
 }

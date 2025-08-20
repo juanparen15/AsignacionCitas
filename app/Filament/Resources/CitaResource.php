@@ -29,26 +29,119 @@ class CitaResource extends Resource
     {
         return $form
             ->schema([
+                Forms\Components\Section::make('Información del Trámite')
+                    ->schema([
+                        Forms\Components\Select::make('tramite_id')
+                            ->label('Trámite')
+                            ->options(function () {
+                                return Tramite::with(['area.secretaria'])
+                                    ->where('activo', true)
+                                    ->get()
+                                    ->mapWithKeys(function ($tramite) {
+                                        return [
+                                            $tramite->id => $tramite->area->secretaria->nombre
+                                                . ' - ' . $tramite->area->nombre
+                                                . ' - ' . $tramite->nombre
+                                        ];
+                                    });
+                            })
+                            ->required()
+                            ->searchable()
+                            ->preload()
+                            ->columnSpanFull(),
+                    ]),
+
+                Forms\Components\Section::make('Fecha y Hora')
+                    ->schema([
+                        Forms\Components\DatePicker::make('fecha_cita')
+                            ->label('Fecha de la Cita')
+                            ->required()
+                            ->native(false)
+                            ->minDate(now()->addDay())
+                            ->maxDate(now()->addMonths(3)),
+
+                        Forms\Components\TimePicker::make('hora_cita')
+                            ->label('Hora de la Cita')
+                            ->required()
+                            ->seconds(false)
+                            ->minutesStep(15),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Datos del Ciudadano')
+                    ->schema([
+                        Forms\Components\Select::make('tipo_documento')
+                            ->label('Tipo de Documento')
+                            ->options([
+                                'CC' => 'Cédula de Ciudadanía',
+                                'CE' => 'Cédula de Extranjería',
+                                'PA' => 'Pasaporte',
+                                'TI' => 'Tarjeta de Identidad',
+                                'RC' => 'Registro Civil',
+                            ])
+                            ->required()
+                            ->native(false),
+
+                        Forms\Components\TextInput::make('numero_documento')
+                            ->label('Número de Documento')
+                            ->required()
+                            ->numeric()
+                            ->maxLength(20),
+
+                        Forms\Components\TextInput::make('nombres')
+                            ->label('Nombres')
+                            ->required()
+                            ->maxLength(100)
+                            ->regex('/^[a-zA-ZÀ-ÿ\s]+$/'),
+
+                        Forms\Components\TextInput::make('apellidos')
+                            ->label('Apellidos')
+                            ->required()
+                            ->maxLength(100)
+                            ->regex('/^[a-zA-ZÀ-ÿ\s]+$/'),
+
+                        Forms\Components\TextInput::make('email')
+                            ->label('Correo Electrónico')
+                            ->email()
+                            ->required()
+                            ->maxLength(150),
+
+                        Forms\Components\TextInput::make('telefono')
+                            ->label('Teléfono')
+                            ->tel()
+                            ->required()
+                            ->maxLength(15)
+                            ->regex('/^[0-9+\-\s]+$/'),
+
+                        Forms\Components\TextInput::make('direccion')
+                            ->label('Dirección')
+                            ->maxLength(200)
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(2),
+
                 Forms\Components\Section::make('Estado de la Cita')
                     ->schema([
-                        Forms\Components\TextInput::make('numero_cita')
-                            ->label('Número de Cita')
-                            ->disabled()
-                            ->dehydrated(false),
-                        
                         Forms\Components\Select::make('estado')
                             ->label('Estado')
                             ->options(Cita::ESTADOS)
+                            ->default('programada')
                             ->required()
                             ->native(false),
-                        
+
                         Forms\Components\Textarea::make('observaciones')
                             ->label('Observaciones')
                             ->rows(3)
                             ->columnSpanFull(),
+
+                        Forms\Components\Toggle::make('acepta_tratamiento_datos')
+                            ->label('Acepta Tratamiento de Datos')
+                            ->default(true)
+                            ->required()
+                            ->helperText('El ciudadano autoriza el tratamiento de sus datos personales'),
                     ])
                     ->columns(2)
-                    ->visibleOn('edit'),
+                    ->visibleOn(['create', 'edit']),
             ]);
     }
 
@@ -62,72 +155,72 @@ class CitaResource extends Resource
                     ->sortable()
                     ->copyable()
                     ->weight('bold'),
-                
+
                 Tables\Columns\TextColumn::make('nombre_completo')
                     ->label('Ciudadano')
                     ->searchable(['nombres', 'apellidos'])
                     ->sortable()
                     ->weight('medium'),
-                
+
                 Tables\Columns\TextColumn::make('documento_completo')
                     ->label('Documento')
                     ->searchable(['numero_documento'])
                     ->toggleable(),
-                
+
                 Tables\Columns\TextColumn::make('tramite.area.secretaria.nombre')
                     ->label('Secretaría')
                     ->searchable()
                     ->sortable()
                     ->toggleable()
-                    ->visible(fn () => Auth::user()->canViewAllCitas()),
-                
+                    ->visible(fn() => Auth::user()->canViewAllCitas()),
+
                 Tables\Columns\TextColumn::make('tramite.area.nombre')
                     ->label('Área')
                     ->searchable()
                     ->sortable()
                     ->toggleable()
                     ->color('primary'),
-                
+
                 Tables\Columns\TextColumn::make('tramite.nombre')
                     ->label('Trámite')
                     ->searchable()
                     ->sortable()
                     ->wrap()
                     ->limit(30),
-                
+
                 Tables\Columns\TextColumn::make('fecha_cita')
                     ->label('Fecha')
                     ->date('d/m/Y')
                     ->sortable()
                     ->color('success')
                     ->weight('medium'),
-                
+
                 Tables\Columns\TextColumn::make('hora_cita')
                     ->label('Hora')
                     ->time('H:i')
                     ->sortable()
                     ->color('success')
                     ->weight('medium'),
-                
+
                 Tables\Columns\SelectColumn::make('estado')
                     ->label('Estado')
                     ->options(Cita::ESTADOS)
                     ->sortable()
                     ->selectablePlaceholder(false)
-                    ->disabled(fn () => !Auth::user()->hasPermission('manage_citas')),
-                
+                    ->disabled(fn() => !Auth::user()->hasPermission('manage_citas')),
+
                 Tables\Columns\TextColumn::make('email')
                     ->label('Email')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->copyable(),
-                
+
                 Tables\Columns\TextColumn::make('telefono')
                     ->label('Teléfono')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->copyable(),
-                
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Creada')
                     ->dateTime('d/m/Y H:i')
@@ -139,27 +232,27 @@ class CitaResource extends Resource
                     ->label('Estado')
                     ->options(Cita::ESTADOS)
                     ->multiple(),
-                
+
                 Tables\Filters\SelectFilter::make('tramite.area.secretaria')
                     ->label('Secretaría')
                     ->relationship('tramite.area.secretaria', 'nombre')
                     ->searchable()
                     ->preload()
-                    ->visible(fn () => Auth::user()->canViewAllCitas()),
-                
+                    ->visible(fn() => Auth::user()->canViewAllCitas()),
+
                 Tables\Filters\SelectFilter::make('tramite.area')
                     ->label('Área')
                     ->relationship('tramite.area', 'nombre')
                     ->searchable()
                     ->preload()
-                    ->visible(fn () => Auth::user()->canViewAllCitas()),
-                
+                    ->visible(fn() => Auth::user()->canViewAllCitas()),
+
                 Tables\Filters\SelectFilter::make('tramite')
                     ->label('Trámite')
                     ->relationship('tramite', 'nombre')
                     ->searchable()
                     ->preload(),
-                
+
                 Tables\Filters\Filter::make('fecha_cita')
                     ->form([
                         Forms\Components\DatePicker::make('desde')
@@ -171,8 +264,8 @@ class CitaResource extends Resource
                     ])
                     ->query(function ($query, array $data) {
                         return $query
-                            ->when($data['desde'], fn ($q) => $q->whereDate('fecha_cita', '>=', $data['desde']))
-                            ->when($data['hasta'], fn ($q) => $q->whereDate('fecha_cita', '<=', $data['hasta']));
+                            ->when($data['desde'], fn($q) => $q->whereDate('fecha_cita', '>=', $data['desde']))
+                            ->when($data['hasta'], fn($q) => $q->whereDate('fecha_cita', '<=', $data['hasta']));
                     })
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
@@ -184,15 +277,15 @@ class CitaResource extends Resource
                         }
                         return $indicators;
                     }),
-                
+
                 Tables\Filters\Filter::make('hoy')
                     ->label('Citas de Hoy')
-                    ->query(fn ($query) => $query->whereDate('fecha_cita', today()))
+                    ->query(fn($query) => $query->whereDate('fecha_cita', today()))
                     ->toggle(),
-                
+
                 Tables\Filters\Filter::make('esta_semana')
                     ->label('Esta Semana')
-                    ->query(fn ($query) => $query->whereBetween('fecha_cita', [
+                    ->query(fn($query) => $query->whereBetween('fecha_cita', [
                         now()->startOfWeek(),
                         now()->endOfWeek()
                     ]))
@@ -200,50 +293,54 @@ class CitaResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                
+
                 Tables\Actions\EditAction::make()
-                    ->visible(fn () => Auth::user()->hasPermission('manage_citas')),
-                
+                    ->visible(fn() => Auth::user()->hasPermission('manage_citas')),
+
                 Tables\Actions\Action::make('confirmar')
                     ->label('Confirmar')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->action(fn (Cita $record) => $record->update(['estado' => 'confirmada']))
-                    ->visible(fn (Cita $record): bool => 
+                    ->action(fn(Cita $record) => $record->update(['estado' => 'confirmada']))
+                    ->visible(
+                        fn(Cita $record): bool =>
                         $record->estado === 'programada' && Auth::user()->hasPermission('manage_citas')
                     )
                     ->requiresConfirmation(),
-                
+
                 Tables\Actions\Action::make('cancelar')
                     ->label('Cancelar')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->action(fn (Cita $record) => $record->update(['estado' => 'cancelada']))
-                    ->visible(fn (Cita $record): bool => 
-                        in_array($record->estado, ['programada', 'confirmada']) && 
-                        Auth::user()->hasPermission('manage_citas')
+                    ->action(fn(Cita $record) => $record->update(['estado' => 'cancelada']))
+                    ->visible(
+                        fn(Cita $record): bool =>
+                        in_array($record->estado, ['programada', 'confirmada']) &&
+                            Auth::user()->hasPermission('manage_citas')
                     ),
-                
+
                 Tables\Actions\Action::make('marcar_atendida')
                     ->label('Marcar Atendida')
                     ->icon('heroicon-o-check-badge')
                     ->color('success')
-                    ->action(fn (Cita $record) => $record->update(['estado' => 'atendida']))
-                    ->visible(fn (Cita $record): bool => 
-                        in_array($record->estado, ['confirmada', 'en_proceso']) && 
-                        Auth::user()->hasPermission('manage_citas')
+                    ->action(fn(Cita $record) => $record->update(['estado' => 'atendida']))
+                    ->visible(
+                        fn(Cita $record): bool =>
+                        in_array($record->estado, ['confirmada', 'en_proceso']) &&
+                            Auth::user()->hasPermission('manage_citas')
                     )
                     ->requiresConfirmation(),
-                
+
                 Tables\Actions\Action::make('no_asistio')
                     ->label('No Asistió')
                     ->icon('heroicon-o-user-minus')
                     ->color('warning')
-                    ->action(fn (Cita $record) => $record->update(['estado' => 'no_asistio']))
-                    ->visible(fn (Cita $record): bool => 
-                        in_array($record->estado, ['confirmada', 'en_proceso']) && 
-                        Auth::user()->hasPermission('manage_citas')
+                    ->action(fn(Cita $record) => $record->update(['estado' => 'no_asistio']))
+                    ->visible(
+                        fn(Cita $record): bool =>
+                        in_array($record->estado, ['confirmada', 'en_proceso']) &&
+                            Auth::user()->hasPermission('manage_citas')
                     )
                     ->requiresConfirmation(),
             ])
@@ -253,19 +350,19 @@ class CitaResource extends Resource
                         ->label('Confirmar Seleccionadas')
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
-                        ->action(fn ($records) => $records->each->update(['estado' => 'confirmada']))
-                        ->visible(fn () => Auth::user()->hasPermission('manage_citas'))
+                        ->action(fn($records) => $records->each->update(['estado' => 'confirmada']))
+                        ->visible(fn() => Auth::user()->hasPermission('manage_citas'))
                         ->requiresConfirmation(),
-                    
+
                     Tables\Actions\BulkAction::make('cancelar')
                         ->label('Cancelar Seleccionadas')
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
-                        ->action(fn ($records) => $records->each->update(['estado' => 'cancelada']))
-                        ->visible(fn () => Auth::user()->hasPermission('manage_citas'))
+                        ->action(fn($records) => $records->each->update(['estado' => 'cancelada']))
+                        ->visible(fn() => Auth::user()->hasPermission('manage_citas'))
                         ->requiresConfirmation(),
                 ])
-                ->visible(fn () => Auth::user()->hasPermission('manage_citas')),
+                    ->visible(fn() => Auth::user()->hasPermission('manage_citas')),
             ])
             ->defaultSort('fecha_cita', 'desc')
             ->striped()
@@ -283,11 +380,11 @@ class CitaResource extends Resource
                             ->copyable()
                             ->weight('bold')
                             ->color('primary'),
-                        
+
                         Infolists\Components\TextEntry::make('estado_label')
                             ->label('Estado')
                             ->badge()
-                            ->color(fn (Cita $record): string => match ($record->estado) {
+                            ->color(fn(Cita $record): string => match ($record->estado) {
                                 'programada' => 'warning',
                                 'confirmada' => 'info',
                                 'en_proceso' => 'primary',
@@ -296,78 +393,78 @@ class CitaResource extends Resource
                                 'no_asistio' => 'gray',
                                 default => 'gray',
                             }),
-                        
+
                         Infolists\Components\TextEntry::make('fecha_hora_formateada')
                             ->label('Fecha y Hora')
                             ->icon('heroicon-m-calendar-days')
                             ->color('success'),
-                        
+
                         Infolists\Components\TextEntry::make('tramite.nombre_completo')
                             ->label('Trámite')
                             ->color('primary'),
                     ])
                     ->columns(2),
-                
+
                 Infolists\Components\Section::make('Datos del Ciudadano')
                     ->schema([
                         Infolists\Components\TextEntry::make('nombre_completo')
                             ->label('Nombre Completo')
                             ->weight('bold'),
-                        
+
                         Infolists\Components\TextEntry::make('documento_completo')
                             ->label('Documento')
                             ->copyable(),
-                        
+
                         Infolists\Components\TextEntry::make('email')
                             ->label('Correo Electrónico')
                             ->copyable()
                             ->icon('heroicon-m-envelope'),
-                        
+
                         Infolists\Components\TextEntry::make('telefono')
                             ->label('Teléfono')
                             ->copyable()
                             ->icon('heroicon-m-phone'),
-                        
+
                         Infolists\Components\TextEntry::make('direccion')
                             ->label('Dirección')
-                            ->visible(fn (Cita $record): bool => !empty($record->direccion))
+                            ->visible(fn(Cita $record): bool => !empty($record->direccion))
                             ->icon('heroicon-m-map-pin'),
                     ])
                     ->columns(2),
-                
+
                 Infolists\Components\Section::make('Información del Trámite')
                     ->schema([
                         Infolists\Components\TextEntry::make('tramite.area.secretaria.nombre')
                             ->label('Secretaría')
                             ->color('primary'),
-                        
+
                         Infolists\Components\TextEntry::make('tramite.area.nombre')
                             ->label('Área')
                             ->color('success'),
-                        
+
                         Infolists\Components\TextEntry::make('tramite.costo_formateado')
                             ->label('Costo'),
-                        
+
                         Infolists\Components\TextEntry::make('tramite.duracion_minutos')
                             ->label('Duración')
                             ->suffix(' minutos'),
                     ])
                     ->columns(2),
-                
+
                 Infolists\Components\Section::make('Información Adicional')
                     ->schema([
                         Infolists\Components\TextEntry::make('observaciones')
-                            ->visible(fn (Cita $record): bool => !empty($record->observaciones))
+                            ->visible(fn(Cita $record): bool => !empty($record->observaciones))
                             ->columnSpanFull(),
-                        
+
                         Infolists\Components\TextEntry::make('created_at')
                             ->label('Fecha de Creación')
                             ->dateTime('d/m/Y H:i')
                             ->icon('heroicon-m-clock'),
-                        
+
                         Infolists\Components\TextEntry::make('ip_creacion')
                             ->label('IP de Creación')
-                            ->visible(fn () => Auth::user()->hasRole('super_admin')),
+                            ->visible(fn() => Auth::user()->hasRole('super_admin')),
                     ])
                     ->columns(2),
             ]);
@@ -384,6 +481,7 @@ class CitaResource extends Resource
     {
         return [
             'index' => Pages\ListCitas::route('/'),
+            'create' => Pages\CreateCita::route('/create'),
             'view' => Pages\ViewCita::route('/{record}'),
             'edit' => Pages\EditCita::route('/{record}/edit'),
         ];
@@ -395,13 +493,13 @@ class CitaResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         $user = Auth::user();
-        
+
         // Si puede ver todas las citas, no aplicar filtros
         if ($user->canViewAllCitas()) {
             return parent::getEloquentQuery()
                 ->with(['tramite.area.secretaria']);
         }
-        
+
         // Si puede ver citas de su área, filtrar por área
         if ($user->canViewAreaCitas()) {
             return parent::getEloquentQuery()
@@ -410,7 +508,7 @@ class CitaResource extends Resource
                 })
                 ->with(['tramite.area.secretaria']);
         }
-        
+
         // Si no tiene permisos, no mostrar nada
         return parent::getEloquentQuery()->whereRaw('1 = 0');
     }
