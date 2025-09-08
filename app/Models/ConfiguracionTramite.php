@@ -37,6 +37,10 @@ class ConfiguracionTramite extends Model
         'documentos_requeridos' => 'array',
     ];
 
+    // Horario de almuerzo configurables
+    const HORA_INICIO_ALMUERZO = '12:00';
+    const HORA_FIN_ALMUERZO = '14:00';
+
     public function tramite(): BelongsTo
     {
         return $this->belongsTo(Tramite::class);
@@ -67,17 +71,108 @@ class ConfiguracionTramite extends Model
         return in_array($fecha->format('Y-m-d'), $this->dias_inhabiles);
     }
 
+    /**
+     * Obtiene las horas disponibles excluyendo el horario de almuerzo
+     */
     public function getHorasDisponibles(Carbon $fecha): array
     {
         $horas = [];
         $horaInicio = Carbon::parse($this->hora_inicio);
         $horaFin = Carbon::parse($this->hora_fin);
         
-        while ($horaInicio->lt($horaFin)) {
-            $horas[] = $horaInicio->format('H:i');
-            $horaInicio->addHour();
+        // Horas de almuerzo
+        $horaInicioAlmuerzo = Carbon::parse(self::HORA_INICIO_ALMUERZO);
+        $horaFinAlmuerzo = Carbon::parse(self::HORA_FIN_ALMUERZO);
+        
+        $horaActual = $horaInicio->copy();
+        
+        while ($horaActual->lt($horaFin)) {
+            // Verificar si la hora actual está en el rango de almuerzo
+            if (!$this->esHorarioAlmuerzo($horaActual, $horaInicioAlmuerzo, $horaFinAlmuerzo)) {
+                $horas[] = $horaActual->format('H:i');
+            }
+            
+            $horaActual->addHour();
         }
         
         return $horas;
+    }
+
+    /**
+     * Verifica si una hora está en el horario de almuerzo
+     */
+    private function esHorarioAlmuerzo(Carbon $hora, Carbon $inicioAlmuerzo, Carbon $finAlmuerzo): bool
+    {
+        return $hora->gte($inicioAlmuerzo) && $hora->lt($finAlmuerzo);
+    }
+
+    /**
+     * Obtiene las horas disponibles con intervalos personalizados (15, 30, 60 minutos)
+     */
+    public function getHorasDisponiblesConIntervalo(Carbon $fecha, int $intervaloMinutos = 60): array
+    {
+        $horas = [];
+        $horaInicio = Carbon::parse($this->hora_inicio);
+        $horaFin = Carbon::parse($this->hora_fin);
+        
+        // Horas de almuerzo
+        $horaInicioAlmuerzo = Carbon::parse(self::HORA_INICIO_ALMUERZO);
+        $horaFinAlmuerzo = Carbon::parse(self::HORA_FIN_ALMUERZO);
+        
+        $horaActual = $horaInicio->copy();
+        
+        while ($horaActual->lt($horaFin)) {
+            // Verificar si la hora actual está en el rango de almuerzo
+            if (!$this->esHorarioAlmuerzo($horaActual, $horaInicioAlmuerzo, $horaFinAlmuerzo)) {
+                // Verificar que haya tiempo suficiente antes del almuerzo o después
+                if ($this->tieneEspacioSuficiente($horaActual, $horaInicioAlmuerzo, $horaFinAlmuerzo, $intervaloMinutos)) {
+                    $horas[] = $horaActual->format('H:i');
+                }
+            }
+            
+            $horaActual->addMinutes($intervaloMinutos);
+        }
+        
+        return $horas;
+    }
+
+    /**
+     * Verifica si hay espacio suficiente para la cita considerando el horario de almuerzo
+     */
+    private function tieneEspacioSuficiente(Carbon $hora, Carbon $inicioAlmuerzo, Carbon $finAlmuerzo, int $duracionMinutos): bool
+    {
+        $finCita = $hora->copy()->addMinutes($duracionMinutos);
+        
+        // Si la cita termina antes del almuerzo o comienza después del almuerzo, está bien
+        if ($finCita->lte($inicioAlmuerzo) || $hora->gte($finAlmuerzo)) {
+            return true;
+        }
+        
+        // Si la cita se superpone con el almuerzo, no es válida
+        return false;
+    }
+
+    /**
+     * Obtiene información del horario de almuerzo
+     */
+    public static function getHorarioAlmuerzo(): array
+    {
+        return [
+            'inicio' => self::HORA_INICIO_ALMUERZO,
+            'fin' => self::HORA_FIN_ALMUERZO,
+            'mensaje' => 'Horario de almuerzo no disponible para citas'
+        ];
+    }
+
+    /**
+     * Verifica si una hora específica está disponible (no es horario de almuerzo)
+     */
+    public function isHoraDisponible(string $hora): bool
+    {
+        $horaCarbon = Carbon::parse($hora);
+        $horaInicioAlmuerzo = Carbon::parse(self::HORA_INICIO_ALMUERZO);
+        $horaFinAlmuerzo = Carbon::parse(self::HORA_FIN_ALMUERZO);
+        
+        return !$this->esHorarioAlmuerzo($horaCarbon, $horaInicioAlmuerzo, $horaFinAlmuerzo);
     }
 }
