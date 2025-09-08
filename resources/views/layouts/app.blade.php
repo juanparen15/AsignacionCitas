@@ -145,7 +145,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-gray-900 text-white py-12 mt-16">
+    <footer class="bg-gray-900 text-gray-300 py-10">
         <div class="container mx-auto px-4">
             <div class="grid md:grid-cols-3 gap-8 mb-8">
                 <div>
@@ -192,7 +192,7 @@
                         </li>
                         <li class="flex items-center">
                             <i class="fas fa-clock mr-3"></i>
-                            Lun - Vie: 8:00 AM - 6:00 PM
+                            Lun - Vie: 8:00 AM - 5:00 PM
                         </li>
                     </ul>
                 </div>
@@ -204,7 +204,7 @@
                     Todos los derechos reservados.
                 </p>
                 <p class="text-gray-500 text-sm mt-2">
-                    Desarrollado con tecnología segura y confiable
+                    Desarrollado en el Area de Sistemas - Alcaldía Municipal de Puerto Boyacá
                 </p>
             </div>
         </div>
