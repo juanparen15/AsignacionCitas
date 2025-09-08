@@ -11,6 +11,8 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Infolists;
+use Filament\Infolists\Infolist;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
 
@@ -45,19 +47,31 @@ class ConfiguracionTramiteResource extends Resource
                     ]),
                 
                 Forms\Components\Section::make('Horarios de Atención')
+                    ->description('Configure los horarios disponibles para este trámite')
                     ->schema([
+                        // Información sobre horario de almuerzo
+                        Forms\Components\Placeholder::make('horario_almuerzo_info')
+                            ->label('Información Importante')
+                            ->content(function () {
+                                $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                                return "⚠️ Horario de almuerzo automáticamente excluido: {$horarioAlmuerzo['inicio']} - {$horarioAlmuerzo['fin']}";
+                            })
+                            ->columnSpanFull(),
+
                         Forms\Components\TimePicker::make('hora_inicio')
                             ->label('Hora de Inicio')
                             ->required()
                             ->default('08:00')
-                            ->seconds(false),
+                            ->seconds(false)
+                            ->helperText('Hora de inicio del horario de atención'),
                         
                         Forms\Components\TimePicker::make('hora_fin')
                             ->label('Hora de Fin')
                             ->required()
                             ->default('17:00')
                             ->seconds(false)
-                            ->after('hora_inicio'),
+                            ->after('hora_inicio')
+                            ->helperText('Hora de fin del horario de atención'),
                         
                         Forms\Components\CheckboxList::make('dias_disponibles')
                             ->label('Días Disponibles')
@@ -73,7 +87,20 @@ class ConfiguracionTramiteResource extends Resource
                             ->default(['1', '2', '3', '4', '5'])
                             ->required()
                             ->columnSpanFull()
-                            ->columns(4),
+                            ->columns(4)
+                            ->helperText('Seleccione los días de la semana disponibles para citas'),
+
+                        // Horarios efectivos (calculados)
+                        Forms\Components\Placeholder::make('horarios_efectivos')
+                            ->label('Horarios Efectivos')
+                            ->content(function (Forms\Get $get) {
+                                $horaInicio = $get('hora_inicio') ?? '08:00';
+                                $horaFin = $get('hora_fin') ?? '17:00';
+                                $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                                
+                                return "🕐 Mañana: {$horaInicio} - {$horarioAlmuerzo['inicio']} | 🕐 Tarde: {$horarioAlmuerzo['fin']} - {$horaFin}";
+                            })
+                            ->columnSpanFull(),
                     ])
                     ->columns(2),
                 
@@ -105,9 +132,14 @@ class ConfiguracionTramiteResource extends Resource
                             ->helperText('Días máximos de anticipación para agendar una cita'),
                         
                         Forms\Components\Placeholder::make('info')
-                            ->label('')
-                            ->content('Las citas se podrán agendar desde mañana hasta 30 días en el futuro')
-                            ->helperText('Basado en la configuración actual'),
+                            ->label('Información Calculada')
+                            ->content(function (Forms\Get $get) {
+                                $minDias = $get('dias_anticipacion_minima') ?? 1;
+                                $maxDias = $get('dias_anticipacion_maxima') ?? 30;
+                                $fechaMin = now()->addDays($minDias)->format('d/m/Y');
+                                $fechaMax = now()->addDays($maxDias)->format('d/m/Y');
+                                return "Las citas se podrán agendar desde el {$fechaMin} hasta el {$fechaMax}";
+                            }),
                     ])
                     ->columns(2),
                 
@@ -180,27 +212,37 @@ class ConfiguracionTramiteResource extends Resource
                     ->sortable()
                     ->wrap(),
                 
-                Tables\Columns\TextColumn::make('hora_inicio')
-                    ->label('Horario')
-                    ->formatStateUsing(fn (ConfiguracionTramite $record): string => 
-                        $record->hora_inicio->format('H:i') . ' - ' . $record->hora_fin->format('H:i')
-                    ),
+                Tables\Columns\TextColumn::make('horario_completo')
+                    ->label('Horario (Sin Almuerzo)')
+                    ->formatStateUsing(function (ConfiguracionTramite $record): string {
+                        $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                        $inicio = $record->hora_inicio->format('H:i');
+                        $fin = $record->hora_fin->format('H:i');
+                        return "{$inicio}-{$horarioAlmuerzo['inicio']} | {$horarioAlmuerzo['fin']}-{$fin}";
+                    })
+                    ->tooltip('Horarios efectivos excluyendo almuerzo'),
                 
                 Tables\Columns\TextColumn::make('citas_por_hora')
                     ->label('Citas/Hora')
                     ->sortable(),
                 
-                Tables\Columns\TextColumn::make('dias_anticipacion_minima')
-                    ->label('Días Min.')
-                    ->sortable(),
-                
-                Tables\Columns\TextColumn::make('dias_anticipacion_maxima')
-                    ->label('Días Max.')
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('anticipacion')
+                    ->label('Anticipación')
+                    ->formatStateUsing(fn (ConfiguracionTramite $record): string => 
+                        $record->dias_anticipacion_minima . '-' . $record->dias_anticipacion_maxima . ' días'
+                    ),
                 
                 Tables\Columns\IconColumn::make('requiere_documentos')
                     ->label('Docs')
                     ->boolean(),
+
+                Tables\Columns\TextColumn::make('horas_disponibles_count')
+                    ->label('Horas/Día')
+                    ->formatStateUsing(function (ConfiguracionTramite $record): string {
+                        $horas = $record->getHorasDisponibles(now());
+                        return count($horas) . ' horas';
+                    })
+                    ->tooltip('Total de horas disponibles por día (excluyendo almuerzo)'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('tramite.area.secretaria')
@@ -208,8 +250,39 @@ class ConfiguracionTramiteResource extends Resource
                     ->relationship('tramite.area.secretaria', 'nombre')
                     ->searchable()
                     ->preload(),
+
+                Tables\Filters\Filter::make('horario_amplio')
+                    ->label('Horario Amplio')
+                    ->query(function ($query) {
+                        return $query->whereRaw('TIME(hora_fin) - TIME(hora_inicio) >= "08:00:00"');
+                    })
+                    ->toggle(),
+
+                Tables\Filters\Filter::make('muchas_citas_por_hora')
+                    ->label('Alta Capacidad')
+                    ->query(fn ($query) => $query->where('citas_por_hora', '>=', 6))
+                    ->toggle(),
             ])
             ->actions([
+                Tables\Actions\Action::make('ver_horarios')
+                    ->label('Ver Horarios')
+                    ->icon('heroicon-m-clock')
+                    ->color('info')
+                    ->action(function (ConfiguracionTramite $record) {
+                        $horas = $record->getHorasDisponibles(now());
+                        $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                        
+                        \Filament\Notifications\Notification::make()
+                            ->title('Horarios Disponibles')
+                            ->body(
+                                "Trámite: {$record->tramite->nombre}\n" .
+                                "Horarios: " . implode(', ', $horas) . "\n" .
+                                "Almuerzo excluido: {$horarioAlmuerzo['inicio']} - {$horarioAlmuerzo['fin']}"
+                            )
+                            ->info()
+                            ->send();
+                    }),
+
                 Tables\Actions\ViewAction::make()
                     ->visible(fn (): bool => Auth::user()->hasPermission('manage_configuracion') || 
                                             Auth::user()->hasRole('super_admin')),
@@ -227,6 +300,110 @@ class ConfiguracionTramiteResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
+            ])
+            ->headerActions([
+                Tables\Actions\Action::make('info_almuerzo')
+                    ->label('Info Horario Almuerzo')
+                    ->icon('heroicon-m-information-circle')
+                    ->color('warning')
+                    ->action(function () {
+                        $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                        
+                        \Filament\Notifications\Notification::make()
+                            ->title('Información del Horario de Almuerzo')
+                            ->body(
+                                "🍽️ Horario: {$horarioAlmuerzo['inicio']} - {$horarioAlmuerzo['fin']}\n" .
+                                "📝 {$horarioAlmuerzo['mensaje']}\n\n" .
+                                "Este horario se excluye automáticamente de todas las configuraciones."
+                            )
+                            ->warning()
+                            ->persistent()
+                            ->send();
+                    }),
+            ]);
+    }
+
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist
+            ->schema([
+                Infolists\Components\Section::make('Información del Trámite')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('tramite.nombre_completo')
+                            ->label('Trámite Completo'),
+                        
+                        Infolists\Components\TextEntry::make('tramite.costo_formateado')
+                            ->label('Costo'),
+                    ])
+                    ->columns(2),
+
+                Infolists\Components\Section::make('Configuración de Horarios')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('horario_atencion')
+                            ->label('Horario de Atención')
+                            ->formatStateUsing(function (ConfiguracionTramite $record): string {
+                                return $record->hora_inicio->format('H:i') . ' - ' . $record->hora_fin->format('H:i');
+                            }),
+
+                        Infolists\Components\TextEntry::make('horario_almuerzo')
+                            ->label('Horario de Almuerzo (Excluido)')
+                            ->formatStateUsing(function (): string {
+                                $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                                return $horarioAlmuerzo['inicio'] . ' - ' . $horarioAlmuerzo['fin'];
+                            })
+                            ->color('warning'),
+
+                        Infolists\Components\TextEntry::make('horarios_efectivos')
+                            ->label('Horarios Efectivos')
+                            ->formatStateUsing(function (ConfiguracionTramite $record): string {
+                                $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                                $inicio = $record->hora_inicio->format('H:i');
+                                $fin = $record->hora_fin->format('H:i');
+                                return "Mañana: {$inicio} - {$horarioAlmuerzo['inicio']} | Tarde: {$horarioAlmuerzo['fin']} - {$fin}";
+                            })
+                            ->color('success'),
+
+                        Infolists\Components\TextEntry::make('dias_disponibles')
+                            ->label('Días Disponibles')
+                            ->formatStateUsing(function (ConfiguracionTramite $record): string {
+                                $dias = [
+                                    '1' => 'Lunes', '2' => 'Martes', '3' => 'Miércoles',
+                                    '4' => 'Jueves', '5' => 'Viernes', '6' => 'Sábado', '7' => 'Domingo'
+                                ];
+                                return collect($record->dias_disponibles)
+                                    ->map(fn($dia) => $dias[$dia] ?? $dia)
+                                    ->join(', ');
+                            }),
+
+                        Infolists\Components\TextEntry::make('citas_por_hora')
+                            ->label('Capacidad por Hora'),
+
+                        Infolists\Components\TextEntry::make('total_horas_dia')
+                            ->label('Total Horas por Día')
+                            ->formatStateUsing(function (ConfiguracionTramite $record): string {
+                                $horas = $record->getHorasDisponibles(now());
+                                return count($horas) . ' horas disponibles';
+                            }),
+                    ])
+                    ->columns(2),
+
+                Infolists\Components\Section::make('Restricciones')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('dias_anticipacion_minima')
+                            ->label('Días Mínimos de Anticipación'),
+
+                        Infolists\Components\TextEntry::make('dias_anticipacion_maxima')
+                            ->label('Días Máximos de Anticipación'),
+
+                        Infolists\Components\TextEntry::make('periodo_disponible')
+                            ->label('Período Disponible')
+                            ->formatStateUsing(function (ConfiguracionTramite $record): string {
+                                $fechaMin = $record->fecha_minima_cita->format('d/m/Y');
+                                $fechaMax = $record->fecha_maxima_cita->format('d/m/Y');
+                                return "Desde {$fechaMin} hasta {$fechaMax}";
+                            }),
+                    ])
+                    ->columns(2),
             ]);
     }
 
@@ -260,12 +437,12 @@ class ConfiguracionTramiteResource extends Resource
                Auth::user()->hasRole('super_admin');
     }
 
-
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListConfiguracionTramites::route('/'),
             'create' => Pages\CreateConfiguracionTramite::route('/create'),
+            'view' => Pages\ViewConfiguracionTramite::route('/{record}'),
             'edit' => Pages\EditConfiguracionTramite::route('/{record}/edit'),
         ];
     }

@@ -22,6 +22,8 @@ return new class extends Migration
             $table->boolean('requiere_documentos')->default(false);
             $table->json('documentos_requeridos')->nullable();
             $table->timestamps();
+            $table->unique('tramite_id');
+            $table->index(['hora_inicio', 'hora_fin']);
         });
     }
 
