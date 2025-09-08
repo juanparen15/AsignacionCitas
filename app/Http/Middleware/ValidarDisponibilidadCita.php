@@ -1,5 +1,5 @@
 <?php
-// app/Http/Middleware/ValidarDisponibilidadCita.php
+// app/Http/Middleware/ValidarDisponibilidadCita.php - Versión mejorada
 
 namespace App\Http\Middleware;
 
@@ -31,6 +31,29 @@ class ValidarDisponibilidadCita
                 
                 $configuracion = $tramite->configuracion;
                 $fecha = Carbon::parse($fechaCita);
+                $ahora = now();
+                
+                // NUEVA VALIDACIÓN: Verificar que no sea una hora pasada si es hoy
+                if ($fecha->isToday()) {
+                    $horaEspecificaHoy = Carbon::today()->setTimeFromTimeString($horaCita);
+                    
+                    // Verificar que no sea una hora que ya pasó
+                    if ($horaEspecificaHoy->lte($ahora)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => "No puede agendar una cita en una hora que ya pasó ({$horaCita}). La hora actual es {$ahora->format('H:i')}."
+                        ], 400);
+                    }
+                    
+                    // Verificar anticipación mínima de 1 hora
+                    if ($horaEspecificaHoy->lte($ahora->copy()->addHour())) {
+                        $horaMinima = $ahora->copy()->addHour()->ceilMinute(60)->format('H:i');
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Para citas del mismo día, debe agendar con al menos 1 hora de anticipación. Hora mínima disponible: {$horaMinima}."
+                        ], 400);
+                    }
+                }
                 
                 // Validar que la fecha esté dentro del rango permitido
                 if ($fecha->lt($configuracion->fecha_minima_cita) || 
@@ -57,13 +80,26 @@ class ValidarDisponibilidadCita
                     ], 400);
                 }
                 
-                // NUEVA VALIDACIÓN: Verificar que no sea horario de almuerzo
-                if (!$configuracion->isHoraDisponible($horaCita)) {
+                // MEJORADA: Usar el nuevo método de validación
+                if (!$configuracion->isHoraDisponibleParaFecha($horaCita, $fecha)) {
                     $horarioAlmuerzo = ConfiguracionTramite::getHorarioAlmuerzo();
+                    
+                    $mensaje = "La hora seleccionada ({$horaCita}) no está disponible.";
+                    
+                    if ($fecha->isToday()) {
+                        $horaMinima = $configuracion->getHoraMinimaHoy();
+                        if ($horaMinima) {
+                            $mensaje .= " Para hoy, las horas disponibles son desde las {$horaMinima}.";
+                        } else {
+                            $mensaje .= " No hay más horarios disponibles para hoy.";
+                        }
+                    } else {
+                        $mensaje .= " Horario de almuerzo: {$horarioAlmuerzo['inicio']} - {$horarioAlmuerzo['fin']}.";
+                    }
+                    
                     return response()->json([
                         'success' => false,
-                        'message' => "La hora seleccionada ({$horaCita}) no está disponible. " . 
-                                   "Horario de almuerzo: {$horarioAlmuerzo['inicio']} - {$horarioAlmuerzo['fin']}"
+                        'message' => $mensaje
                     ], 400);
                 }
                 
@@ -78,7 +114,7 @@ class ValidarDisponibilidadCita
                     ], 400);
                 }
                 
-                // Validar disponibilidad de hora
+                // Validar disponibilidad de cupos en esa hora
                 $citasEnHora = Cita::where('tramite_id', $tramiteId)
                     ->whereDate('fecha_cita', $fechaCita)
                     ->whereTime('hora_cita', $horaCita)

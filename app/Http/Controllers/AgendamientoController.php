@@ -105,14 +105,18 @@ class AgendamientoController extends Controller
 
         // Verificar que la fecha sea válida
         if (!$configuracion->isDiaDisponible($fechaCarbon) || $configuracion->isDiaInhabil($fechaCarbon)) {
-            return response()->json(['error' => 'Fecha no disponible'], 400);
+            return response()->json([
+                'error' => 'Fecha no disponible',
+                'horas' => [],
+                'mensaje' => 'La fecha seleccionada no está disponible'
+            ], 400);
         }
 
+        // Obtener horas disponibles con la nueva validación
         $horasDisponibles = $configuracion->getHorasDisponibles($fechaCarbon);
         $horasConDisponibilidad = [];
 
         foreach ($horasDisponibles as $hora) {
-
             // Contar cuántas citas ya hay en esa hora
             $citasEnHora = Cita::where('tramite_id', $tramiteId)
                 ->whereDate('fecha_cita', $fecha)
@@ -131,7 +135,27 @@ class AgendamientoController extends Controller
             }
         }
 
-        return response()->json($horasConDisponibilidad);
+        // Obtener mensaje explicativo
+        $mensaje = $configuracion->getMensajeDisponibilidad($fechaCarbon);
+
+        // Información adicional para el frontend
+        $info = [
+            'es_hoy' => $fechaCarbon->isToday(),
+            'fecha_formateada' => $fechaCarbon->format('d/m/Y'),
+            'hora_actual' => now()->format('H:i'),
+            'horario_almuerzo' => ConfiguracionTramite::getHorarioAlmuerzo()
+        ];
+
+        if ($fechaCarbon->isToday()) {
+            $info['hora_minima_hoy'] = $configuracion->getHoraMinimaHoy();
+        }
+
+        return response()->json([
+            'horas' => $horasConDisponibilidad,
+            'mensaje' => $mensaje,
+            'info' => $info,
+            'total_disponibles' => count($horasConDisponibilidad)
+        ]);
     }
 
     public function store(Request $request)

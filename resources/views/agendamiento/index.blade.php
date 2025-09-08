@@ -4,6 +4,63 @@
 @section('title', 'Agendar Cita')
 
 @section('content')
+
+    {{-- <style>
+        .tooltip-hora[data-tooltip]:hover::before {
+            content: attr(data-tooltip);
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #1f2937;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .tooltip-hora[data-tooltip]:hover::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #1f2937;
+            z-index: 10;
+        }
+
+        /* Animación para horas no disponibles */
+        .hora-no-disponible {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hora-no-disponible::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: -100%;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(45deg, transparent, #ef4444, transparent);
+            animation: strikethrough 2s ease-in-out infinite;
+        }
+
+        @keyframes strikethrough {
+            0% {
+                left: -100%;
+            }
+
+            100% {
+                left: 100%;
+            }
+        }
+    </style> --}}
     <div x-data="agendamientoApp()" class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4">
         <div class="max-w-5xl mx-auto">
             <!-- Header Section -->
@@ -256,7 +313,7 @@
                         </div>
 
                         <!-- Información de Horarios de Atención -->
-                        <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6">
+                        {{-- <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6">
                             <div class="flex items-start">
                                 <div
                                     class="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-100 flex-shrink-0">
@@ -288,7 +345,7 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </div> --}}
 
                         <div class="grid lg:grid-cols-2 gap-8">
                             <!-- Selección de Fecha -->
@@ -305,7 +362,7 @@
                             </div>
 
                             <!-- Selección de Hora -->
-                            <div class="space-y-4">
+                            {{-- <div class="space-y-4">
                                 <label class="block text-lg font-semibold text-gray-700">Seleccione la Hora</label>
                                 <div class="space-y-3 max-h-80 overflow-y-auto bg-gray-50 rounded-xl p-4">
                                     <template x-for="hora in horasDisponibles" :key="hora.hora">
@@ -344,8 +401,106 @@
                                         <p class="text-sm">para esta fecha</p>
                                     </div>
                                 </div>
+                            </div> --}}
+                            <div class="space-y-4">
+                                <label class="block text-lg font-semibold text-gray-700">Seleccione la Hora</label>
+
+                                <!-- Mensaje informativo sobre horarios -->
+                                <div x-show="fechaSeleccionada"
+                                    class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                                    <div class="flex items-start">
+                                        <div
+                                            class="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 flex-shrink-0">
+                                            <i class="fas fa-info-circle text-blue-600 text-sm"></i>
+                                        </div>
+                                        <div class="ml-3">
+                                            <p class="text-sm text-blue-800">
+                                                <span x-show="esFechaHoy()" class="font-medium">
+                                                    Para citas del mismo día se requiere al menos 1 hora de anticipación.
+                                                </span>
+                                                <span x-show="!esFechaHoy()">
+                                                    Horarios disponibles excluyendo el almuerzo (12:00 PM - 2:00 PM).
+                                                </span>
+                                            </p>
+                                            <p x-show="esFechaHoy()" class="text-xs text-blue-600 mt-1">
+                                                Hora actual: <span x-text="obtenerHoraActual()"></span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Lista de horas disponibles MEJORADA -->
+                                <div class="space-y-3 max-h-80 overflow-y-auto bg-gray-50 rounded-xl p-4">
+                                    <template x-for="hora in horasDisponibles" :key="hora.hora">
+                                        <button @click="seleccionarHora(hora.hora)"
+                                            :disabled="!esHoraSeleccionable(hora.hora)"
+                                            class="w-full px-4 py-4 border-2 rounded-xl text-left transition-all duration-200 hover:shadow-md tooltip-hora"
+                                            :class="getClasesHora(hora.hora)" :data-tooltip="getTooltipHora(hora.hora)">
+                                            <div class="flex items-center justify-between">
+                                                <div class="flex items-center">
+                                                    <div class="w-3 h-3 rounded-full mr-3"
+                                                        :class="horaSeleccionada === hora.hora ? 'bg-blue-500' :
+                                                            esHoraSeleccionable(hora.hora) ? 'bg-gray-300' :
+                                                            'bg-red-300'">
+                                                    </div>
+                                                    <span class="font-semibold text-lg" x-text="hora.hora"></span>
+
+                                                    <!-- Indicador visual para horas no disponibles -->
+                                                    <span x-show="!esHoraSeleccionable(hora.hora)"
+                                                        class="ml-2 text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full">
+                                                        No disponible
+                                                    </span>
+                                                </div>
+                                                <div class="text-right">
+                                                    <span class="text-sm font-medium"
+                                                        :class="horaSeleccionada === hora.hora ? 'text-blue-600' :
+                                                            esHoraSeleccionable(hora.hora) ? 'text-gray-500' :
+                                                            'text-red-500'">
+                                                        <span x-text="hora.disponibles"></span>/<span
+                                                            x-text="hora.total"></span> disponibles
+                                                    </span>
+                                                    <div class="w-16 h-2 bg-gray-200 rounded-full mt-1">
+                                                        <div class="h-full rounded-full transition-all duration-300"
+                                                            :class="hora.disponibles > 0 ? 'bg-green-400' : 'bg-red-400'"
+                                                            :style="{ width: (hora.disponibles / hora.total) * 100 + '%' }">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </template>
+
+                                    <!-- Mensaje cuando no hay horas disponibles -->
+                                    <div x-show="horasDisponibles.length === 0 && fechaSeleccionada"
+                                        class="text-center py-12 text-gray-500">
+                                        <i class="fas fa-calendar-times text-6xl mb-4 text-gray-300"></i>
+                                        <p class="text-lg font-medium">No hay horarios disponibles</p>
+                                        <p class="text-sm"
+                                            x-text="esFechaHoy() ? 'para el resto del día' : 'para esta fecha'"></p>
+                                        <button @click="sugerirFechaAlternativa()"
+                                            class="mt-4 text-blue-600 hover:text-blue-800 underline text-sm">
+                                            Ver fechas alternativas
+                                        </button>
+                                    </div>
+
+                                    <!-- Loading state -->
+                                    <div x-show="cargandoHoras" class="text-center py-8">
+                                        <div class="inline-flex items-center">
+                                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600"
+                                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10"
+                                                    stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                                </path>
+                                            </svg>
+                                            <span class="text-gray-600">Cargando horarios disponibles...</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
                     </div>
 
                     <!-- Navigation Buttons -->
@@ -824,6 +979,140 @@
                                 });
                             }
                         });
+                    },
+                    // Verificar si la fecha seleccionada es hoy
+                    esFechaHoy() {
+                        if (!this.fechaSeleccionada) return false;
+                        const hoy = new Date().toISOString().split('T')[0];
+                        return this.fechaSeleccionada === hoy;
+                    },
+
+                    // Obtener la hora actual formateada
+                    obtenerHoraActual() {
+                        const ahora = new Date();
+                        return ahora.getHours().toString().padStart(2, '0') + ':' +
+                            ahora.getMinutes().toString().padStart(2, '0');
+                    },
+
+                    // Verificar si una hora es seleccionable
+                    esHoraSeleccionable(hora) {
+                        if (!this.fechaSeleccionada) return false;
+
+                        // Si no es hoy, todas las horas disponibles son seleccionables
+                        if (!this.esFechaHoy()) return true;
+
+                        // Si es hoy, verificar que no sea una hora pasada
+                        const ahora = new Date();
+                        const [horas, minutos] = hora.split(':');
+                        const horaCompleta = new Date();
+                        horaCompleta.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+
+                        // Debe ser al menos 1 hora después de ahora
+                        const unaHoraDespues = new Date(ahora.getTime() + 60 * 60 * 1000);
+                        return horaCompleta > unaHoraDespues;
+                    },
+
+                    // Obtener las clases CSS para una hora
+                    getClasesHora(hora) {
+                        const base = 'transition-all duration-200';
+
+                        if (this.horaSeleccionada === hora) {
+                            return base + ' border-blue-500 bg-blue-50 text-blue-700 shadow-md';
+                        }
+
+                        if (!this.esHoraSeleccionable(hora)) {
+                            return base + ' border-red-200 bg-red-50 text-red-400 cursor-not-allowed opacity-60';
+                        }
+
+                        return base + ' border-gray-200 hover:border-blue-300 bg-white hover:bg-blue-50';
+                    },
+
+                    // Obtener el tooltip para una hora
+                    getTooltipHora(hora) {
+                        if (!this.esFechaHoy()) return '';
+
+                        if (!this.esHoraSeleccionable(hora)) {
+                            const ahora = new Date();
+                            const [horas, minutos] = hora.split(':');
+                            const horaCompleta = new Date();
+                            horaCompleta.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+
+                            if (horaCompleta <= ahora) {
+                                return 'Esta hora ya pasó';
+                            } else {
+                                return 'Se requiere al menos 1 hora de anticipación';
+                            }
+                        }
+
+                        return '';
+                    },
+
+                    // Seleccionar una hora con validación
+                    seleccionarHora(hora) {
+                        if (!this.esHoraSeleccionable(hora)) {
+                            Swal.fire({
+                                title: 'Hora no disponible',
+                                text: this.getTooltipHora(hora) || 'Esta hora no está disponible',
+                                icon: 'warning',
+                                confirmButtonText: 'Entendido'
+                            });
+                            return;
+                        }
+
+                        this.horaSeleccionada = hora;
+                    },
+
+                    // Sugerir fechas alternativas
+                    sugerirFechaAlternativa() {
+                        const mañana = new Date();
+                        mañana.setDate(mañana.getDate() + 1);
+                        const fechaMañana = mañana.toISOString().split('T')[0];
+
+                        Swal.fire({
+                            title: 'Fechas alternativas',
+                            //                     html: `
+                    //     <p class="mb-4">No hay horarios disponibles para esta fecha.</p>
+                    //     <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700" 
+                    //             onclick="this.closest('.swal2-popup').parentElement.parentElement.style.display='none'; 
+                    //                     document.querySelector('input[type=date]').value='${fechaMañana}'; 
+                    //                     document.querySelector('input[type=date]').dispatchEvent(new Event('change'));">
+                    //         Probar mañana (${mañana.toLocaleDateString('es-CO')})
+                    //     </button>
+                    // `,
+                            html: ` Probar mañana ${mañana.toLocaleDateString('es-CO')} `,
+                            icon: 'info',
+
+                            showConfirmButton: false,
+                            showCancelButton: true,
+                            cancelButtonText: 'Cerrar'
+                        });
+                    },
+
+                    // Variable para estado de carga
+                    cargandoHoras: false,
+
+                    // Modificar la función cargarHorasDisponibles para usar el estado de carga
+                    async cargarHorasDisponibles() {
+                        if (!this.fechaSeleccionada || !this.tramiteSeleccionado) return;
+
+                        this.cargandoHoras = true;
+                        this.horasDisponibles = [];
+                        this.horaSeleccionada = '';
+
+                        try {
+                            const response = await axios.get(
+                                `/tramites/${this.tramiteSeleccionado.id}/horas/${this.fechaSeleccionada}`);
+
+                            const data = response.data;
+                            this.horasDisponibles = data.horas || [];
+
+                            // Resto de la lógica...
+
+                        } catch (error) {
+                            // Manejo de errores...
+                        } finally {
+                            this.cargandoHoras = false;
+                        }
                     }
                 }
             }
