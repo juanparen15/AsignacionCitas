@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Exception;
 
 class AgendamientoController extends Controller
 {
@@ -21,7 +22,7 @@ class AgendamientoController extends Controller
         $secretarias = Secretaria::activas()
             ->with(['areasActivas.tramitesActivos'])
             ->get();
-            
+
         return view('agendamiento.index', compact('secretarias'));
     }
 
@@ -32,7 +33,7 @@ class AgendamientoController extends Controller
             ->with(['tramitesActivos'])
             ->orderBy('orden')
             ->get();
-            
+
         return response()->json($areas);
     }
 
@@ -43,7 +44,7 @@ class AgendamientoController extends Controller
             ->with(['configuracion'])
             ->orderBy('orden')
             ->get();
-            
+
         return response()->json($tramites);
     }
 
@@ -51,13 +52,13 @@ class AgendamientoController extends Controller
     {
         $tramite = Tramite::with(['configuracion', 'area.secretaria'])
             ->findOrFail($tramiteId);
-            
+
         if (!$tramite->configuracion) {
             return response()->json(['error' => 'Trámite sin configuración'], 400);
         }
 
         $configuracion = $tramite->configuracion;
-        
+
         return response()->json([
             'tramite' => $tramite,
             'configuracion' => $configuracion,
@@ -70,7 +71,7 @@ class AgendamientoController extends Controller
     {
         $tramite = Tramite::with('configuracion')->findOrFail($tramiteId);
         $configuracion = $tramite->configuracion;
-        
+
         if (!$configuracion) {
             return response()->json(['error' => 'Trámite sin configuración'], 400);
         }
@@ -95,13 +96,13 @@ class AgendamientoController extends Controller
     {
         $tramite = Tramite::with('configuracion')->findOrFail($tramiteId);
         $configuracion = $tramite->configuracion;
-        
+
         if (!$configuracion) {
             return response()->json(['error' => 'Trámite sin configuración'], 400);
         }
 
         $fechaCarbon = Carbon::parse($fecha);
-        
+
         // Verificar que la fecha sea válida
         if (!$configuracion->isDiaDisponible($fechaCarbon) || $configuracion->isDiaInhabil($fechaCarbon)) {
             return response()->json(['error' => 'Fecha no disponible'], 400);
@@ -111,6 +112,8 @@ class AgendamientoController extends Controller
         $horasConDisponibilidad = [];
 
         foreach ($horasDisponibles as $hora) {
+
+            // Contar cuántas citas ya hay en esa hora
             $citasEnHora = Cita::where('tramite_id', $tramiteId)
                 ->whereDate('fecha_cita', $fecha)
                 ->whereTime('hora_cita', $hora)
@@ -118,7 +121,7 @@ class AgendamientoController extends Controller
                 ->count();
 
             $disponibles = $configuracion->citas_por_hora - $citasEnHora;
-            
+
             if ($disponibles > 0) {
                 $horasConDisponibilidad[] = [
                     'hora' => $hora,
@@ -229,10 +232,9 @@ class AgendamientoController extends Controller
                 'cita' => $cita->load(['tramite.area.secretaria']),
                 'numero_cita' => $cita->numero_cita
             ]);
-
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error al agendar la cita. Por favor intente nuevamente.'

@@ -389,8 +389,8 @@
                                     <option value="CC">Cédula de Ciudadanía</option>
                                     <option value="CE">Cédula de Extranjería</option>
                                     <option value="PA">Pasaporte</option>
-                                    <option value="TI">Tarjeta de Identidad</option>
-                                    <option value="RC">Registro Civil</option>
+                                    {{-- <option value="TI">Tarjeta de Identidad</option>
+                                    <option value="RC">Registro Civil</option> --}}
                                 </select>
                             </div>
 

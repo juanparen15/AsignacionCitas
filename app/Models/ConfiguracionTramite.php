@@ -72,7 +72,8 @@ class ConfiguracionTramite extends Model
     }
 
     /**
-     * Obtiene las horas disponibles excluyendo el horario de almuerzo
+     * Obtiene las horas disponibles excluyendo el horario de almuerzo y horas pasadas
+     * Esta es la función principal que filtra las horas
      */
     public function getHorasDisponibles(Carbon $fecha): array
     {
@@ -84,12 +85,29 @@ class ConfiguracionTramite extends Model
         $horaInicioAlmuerzo = Carbon::parse(self::HORA_INICIO_ALMUERZO);
         $horaFinAlmuerzo = Carbon::parse(self::HORA_FIN_ALMUERZO);
         
+        // Verificar si la fecha es hoy para filtrar horas pasadas
+        $esHoy = $fecha->isToday();
+        $ahora = now();
+        
         $horaActual = $horaInicio->copy();
         
         while ($horaActual->lt($horaFin)) {
-            // Verificar si la hora actual está en el rango de almuerzo
+            // Verificar si la hora actual NO está en el rango de almuerzo
             if (!$this->esHorarioAlmuerzo($horaActual, $horaInicioAlmuerzo, $horaFinAlmuerzo)) {
-                $horas[] = $horaActual->format('H:i');
+                
+                // Si es hoy, solo incluir horas futuras con al menos 1 hora de anticipación
+                if ($esHoy) {
+                    // Crear un objeto Carbon para la hora específica de hoy
+                    $horaEspecificaHoy = Carbon::today()->setTimeFromTimeString($horaActual->format('H:i'));
+                    
+                    // Verificar que la hora sea al menos 1 hora después de la hora actual
+                    if ($horaEspecificaHoy->gt($ahora->copy()->addHour())) {
+                        $horas[] = $horaActual->format('H:i');
+                    }
+                } else {
+                    // Si NO es hoy, incluir todas las horas válidas (sin restricción de hora pasada)
+                    $horas[] = $horaActual->format('H:i');
+                }
             }
             
             $horaActual->addHour();
@@ -108,6 +126,7 @@ class ConfiguracionTramite extends Model
 
     /**
      * Obtiene las horas disponibles con intervalos personalizados (15, 30, 60 minutos)
+     * También filtra horas pasadas si es hoy
      */
     public function getHorasDisponiblesConIntervalo(Carbon $fecha, int $intervaloMinutos = 60): array
     {
@@ -119,14 +138,30 @@ class ConfiguracionTramite extends Model
         $horaInicioAlmuerzo = Carbon::parse(self::HORA_INICIO_ALMUERZO);
         $horaFinAlmuerzo = Carbon::parse(self::HORA_FIN_ALMUERZO);
         
+        // Verificar si la fecha es hoy para filtrar horas pasadas
+        $esHoy = $fecha->isToday();
+        $ahora = now();
+        
         $horaActual = $horaInicio->copy();
         
         while ($horaActual->lt($horaFin)) {
-            // Verificar si la hora actual está en el rango de almuerzo
+            // Verificar si la hora actual NO está en el rango de almuerzo
             if (!$this->esHorarioAlmuerzo($horaActual, $horaInicioAlmuerzo, $horaFinAlmuerzo)) {
                 // Verificar que haya tiempo suficiente antes del almuerzo o después
                 if ($this->tieneEspacioSuficiente($horaActual, $horaInicioAlmuerzo, $horaFinAlmuerzo, $intervaloMinutos)) {
-                    $horas[] = $horaActual->format('H:i');
+                    
+                    // Si es hoy, solo incluir horas futuras con anticipación
+                    if ($esHoy) {
+                        $horaEspecificaHoy = Carbon::today()->setTimeFromTimeString($horaActual->format('H:i'));
+                        
+                        // Verificar que la hora sea al menos 1 hora después de ahora
+                        if ($horaEspecificaHoy->gt($ahora->copy()->addHour())) {
+                            $horas[] = $horaActual->format('H:i');
+                        }
+                    } else {
+                        // Si NO es hoy, incluir todas las horas válidas
+                        $horas[] = $horaActual->format('H:i');
+                    }
                 }
             }
             
@@ -165,14 +200,25 @@ class ConfiguracionTramite extends Model
     }
 
     /**
-     * Verifica si una hora específica está disponible (no es horario de almuerzo)
+     * Verifica si una hora específica está disponible (no es horario de almuerzo ni hora pasada)
      */
-    public function isHoraDisponible(string $hora): bool
+    public function isHoraDisponible(string $hora, Carbon $fecha = null): bool
     {
         $horaCarbon = Carbon::parse($hora);
         $horaInicioAlmuerzo = Carbon::parse(self::HORA_INICIO_ALMUERZO);
         $horaFinAlmuerzo = Carbon::parse(self::HORA_FIN_ALMUERZO);
         
-        return !$this->esHorarioAlmuerzo($horaCarbon, $horaInicioAlmuerzo, $horaFinAlmuerzo);
+        // Verificar que no sea horario de almuerzo
+        $noEsAlmuerzo = !$this->esHorarioAlmuerzo($horaCarbon, $horaInicioAlmuerzo, $horaFinAlmuerzo);
+        
+        // Si se proporciona fecha y es hoy, verificar que no sea hora pasada
+        if ($fecha && $fecha->isToday()) {
+            $horaEspecificaHoy = Carbon::today()->setTimeFromTimeString($hora);
+            $noEsHoraPasada = $horaEspecificaHoy->gt(now()->addHour());
+            
+            return $noEsAlmuerzo && $noEsHoraPasada;
+        }
+        
+        return $noEsAlmuerzo;
     }
 }

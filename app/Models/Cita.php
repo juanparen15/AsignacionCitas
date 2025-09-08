@@ -44,8 +44,6 @@ class Cita extends Model
         'CC' => 'Cédula de Ciudadanía',
         'CE' => 'Cédula de Extranjería',
         'PA' => 'Pasaporte',
-        'TI' => 'Tarjeta de Identidad',
-        'RC' => 'Registro Civil',
     ];
 
     const ESTADOS = [
