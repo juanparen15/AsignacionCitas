@@ -184,7 +184,7 @@
                     <ul class="space-y-2 text-gray-400">
                         <li class="flex items-center">
                             <i class="fas fa-phone mr-3"></i>
-                            (57) 300 123 4567
+                            (57) 317 290 0818
                         </li>
                         <li class="flex items-center">
                             <i class="fas fa-envelope mr-3"></i>

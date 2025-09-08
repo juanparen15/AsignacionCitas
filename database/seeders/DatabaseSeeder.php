@@ -34,7 +34,7 @@ class DatabaseSeeder extends Seeder
 
         // Crear usuario coordinador de ejemplo
         $coordinador = User::firstOrCreate(
-            ['email' => 'coordinador@sistema.com'],
+            ['email' => 'coordinador@sistemas.com'],
             [
                 'name' => 'Coordinador de Área',
                 'password' => Hash::make('coordinador123'),
