@@ -11,6 +11,7 @@ return new class extends Migration
     {
         Schema::create('tramites', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('secretaria_id')->constrained()->onDelete('cascade');
             $table->foreignId('area_id')->constrained()->onDelete('cascade');
             $table->string('nombre');
             $table->text('descripcion')->nullable();
