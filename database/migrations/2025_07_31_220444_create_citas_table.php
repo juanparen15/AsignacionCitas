@@ -15,7 +15,7 @@ return new class extends Migration
             $table->foreignId('tramite_id')->constrained()->onDelete('cascade');
             
             // Datos personales
-            $table->enum('tipo_documento', ['CC', 'CE', 'PA', 'TI', 'RC']);
+            $table->enum('tipo_documento', ['CC', 'CE', 'PA']);
             $table->string('numero_documento');
             $table->string('nombres');
             $table->string('apellidos');

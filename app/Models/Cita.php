@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class Cita extends Model
 {
@@ -33,11 +34,14 @@ class Cita extends Model
 
     protected $casts = [
         'fecha_cita' => 'date',
-        'hora_cita' => 'datetime:H:i',
+        'hora_cita' => 'string', // CAMBIADO: de 'datetime:H:i' a 'string'
         'fecha_hora_cita' => 'datetime',
         'acepta_tratamiento_datos' => 'boolean',
-        'fecha_creacion' => 'datetime',
-        'fecha_actualizacion' => 'datetime',
+    ];
+
+    // Estado por defecto
+    protected $attributes = [
+        'estado' => 'programada',
     ];
 
     const TIPOS_DOCUMENTO = [
@@ -77,7 +81,7 @@ class Cita extends Model
 
     public function getFechaHoraFormateadaAttribute(): string
     {
-        return $this->fecha_cita->format('d/m/Y') . ' a las ' . $this->hora_cita->format('H:i');
+        return $this->fecha_cita->format('d/m/Y') . ' a las ' . $this->hora_cita;
     }
 
     public function scopeProgramadas($query)
@@ -99,14 +103,42 @@ class Cita extends Model
     protected static function booted()
     {
         static::creating(function ($cita) {
-            $cita->numero_cita = static::generarNumeroCita();
-
-            // Solo generar fecha_hora_cita si no se ha establecido
-            if (!$cita->fecha_hora_cita) {
-                $cita->fecha_hora_cita = Carbon::parse($cita->fecha_cita . ' ' . $cita->hora_cita);
+            // Generar número de cita si no existe
+            if (!$cita->numero_cita) {
+                $cita->numero_cita = static::generarNumeroCita();
             }
 
+            // Generar fecha_hora_cita combinando fecha y hora
+            if ($cita->fecha_cita && $cita->hora_cita) {
+                try {
+                    // Extraer solo la fecha sin la hora para evitar conflictos
+                    $fechaSolo = Carbon::parse($cita->fecha_cita)->format('Y-m-d');
+                    $fechaHoraCombinada = $fechaSolo . ' ' . $cita->hora_cita;
+                    $cita->fecha_hora_cita = Carbon::parse($fechaHoraCombinada);
+                    
+                    Log::info('fecha_hora_cita creada correctamente', [
+                        'fecha_cita_original' => $cita->fecha_cita,
+                        'fecha_solo' => $fechaSolo,
+                        'hora_cita' => $cita->hora_cita,
+                        'fecha_hora_final' => $cita->fecha_hora_cita
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Error creando fecha_hora_cita: ' . $e->getMessage(), [
+                        'fecha_cita' => $cita->fecha_cita,
+                        'hora_cita' => $cita->hora_cita
+                    ]);
+                    // Si falla, establecer un valor por defecto
+                    $cita->fecha_hora_cita = now();
+                }
+            }
+
+            // Establecer IP de creación
             $cita->ip_creacion = $cita->ip_creacion ?? request()->ip();
+
+            // Establecer estado por defecto si no existe
+            if (!$cita->estado) {
+                $cita->estado = 'programada';
+            }
         });
     }
 

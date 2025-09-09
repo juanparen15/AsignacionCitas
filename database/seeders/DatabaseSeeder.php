@@ -62,7 +62,7 @@ class DatabaseSeeder extends Seeder
 
         $this->command->info('Usuarios de ejemplo creados:');
         $this->command->info('- admin@sistema.com / admin123 (Super Admin)');
-        $this->command->info('- coordinador@sistema.com / coordinador123 (Coordinador)');
+        $this->command->info('- coordinador@sistemas.com / coordinador123 (Coordinador)');
         $this->command->info('- operador@sistema.com / operador123 (Operador)');
     }
 }

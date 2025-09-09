@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Exception;
+use Illuminate\Support\Facades\Log;
 
 class AgendamientoController extends Controller
 {
@@ -162,22 +162,25 @@ class AgendamientoController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'tramite_id' => 'required|exists:tramites,id',
-            'fecha_cita' => 'required|date|after:today',
+            'fecha_cita' => 'required|date|after_or_equal:today|before_or_equal:' . now()->addMonths(2)->format('Y-m-d'),
             'hora_cita' => 'required|date_format:H:i',
-            'tipo_documento' => 'required|in:CC,CE,PA,TI,RC',
+            'tipo_documento' => 'required|in:CC,CE,PA',
             'numero_documento' => 'required|string|max:20|regex:/^[0-9]+$/',
             'nombres' => 'required|string|max:100|regex:/^[a-zA-ZÀ-ÿ\s]+$/',
             'apellidos' => 'required|string|max:100|regex:/^[a-zA-ZÀ-ÿ\s]+$/',
             'email' => 'required|email|max:150',
-            'telefono' => 'required|string|max:15|regex:/^[0-9+\-\s]+$/',
+            'telefono' => 'required|string|max:15|regex:/^[0-9+\-\s()]+$/',
             'direccion' => 'nullable|string|max:200',
-            'acepta_tratamiento_datos' => 'required|boolean|accepted',
+            'acepta_tratamiento_datos' => 'required|accepted',
         ], [
             'tramite_id.required' => 'Debe seleccionar un trámite',
             'tramite_id.exists' => 'El trámite seleccionado no es válido',
             'fecha_cita.required' => 'Debe seleccionar una fecha',
-            'fecha_cita.after' => 'La fecha debe ser posterior a hoy',
+            'fecha_cita.date' => 'La fecha debe ser válida',
+            'fecha_cita.after_or_equal' => 'La fecha no puede ser anterior a hoy',
+            'fecha_cita.before_or_equal' => 'La fecha no puede ser posterior a 2 meses',
             'hora_cita.required' => 'Debe seleccionar una hora',
+            'hora_cita.date_format' => 'La hora debe tener formato válido (HH:MM)',
             'tipo_documento.required' => 'Debe seleccionar el tipo de documento',
             'numero_documento.required' => 'El número de documento es obligatorio',
             'numero_documento.regex' => 'El número de documento solo puede contener números',
@@ -188,11 +191,16 @@ class AgendamientoController extends Controller
             'email.required' => 'El correo electrónico es obligatorio',
             'email.email' => 'Debe ingresar un correo electrónico válido',
             'telefono.required' => 'El teléfono es obligatorio',
-            'telefono.regex' => 'El teléfono solo puede contener números, espacios, + y -',
+            'telefono.regex' => 'El teléfono solo puede contener números, espacios, +, - y paréntesis',
             'acepta_tratamiento_datos.accepted' => 'Debe aceptar el tratamiento de datos personales',
         ]);
 
         if ($validator->fails()) {
+            Log::warning('Validación falló al agendar cita', [
+                'errors' => $validator->errors()->toArray(),
+                'data' => $request->except(['acepta_tratamiento_datos'])
+            ]);
+
             return response()->json([
                 'success' => false,
                 'errors' => $validator->errors()
@@ -202,9 +210,25 @@ class AgendamientoController extends Controller
         try {
             DB::beginTransaction();
 
+            // Log de datos recibidos
+            Log::info('Iniciando proceso de creación de cita', [
+                'tramite_id' => $request->tramite_id,
+                'fecha_cita' => $request->fecha_cita,
+                'hora_cita' => $request->hora_cita,
+                'documento' => $request->tipo_documento . '-' . $request->numero_documento
+            ]);
+
             // Verificar disponibilidad nuevamente
             $tramite = Tramite::with('configuracion')->findOrFail($request->tramite_id);
             $configuracion = $tramite->configuracion;
+
+            if (!$configuracion) {
+                Log::error('Trámite sin configuración', ['tramite_id' => $request->tramite_id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El trámite seleccionado no tiene configuración disponible'
+                ], 400);
+            }
 
             $citasEnHora = Cita::where('tramite_id', $request->tramite_id)
                 ->whereDate('fecha_cita', $request->fecha_cita)
@@ -213,6 +237,14 @@ class AgendamientoController extends Controller
                 ->count();
 
             if ($citasEnHora >= $configuracion->citas_por_hora) {
+                Log::warning('No hay disponibilidad para la hora solicitada', [
+                    'tramite_id' => $request->tramite_id,
+                    'fecha_cita' => $request->fecha_cita,
+                    'hora_cita' => $request->hora_cita,
+                    'citas_existentes' => $citasEnHora,
+                    'limite' => $configuracion->citas_por_hora
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Ya no hay disponibilidad para esta fecha y hora'
@@ -227,14 +259,20 @@ class AgendamientoController extends Controller
                 ->first();
 
             if ($citaExistente) {
+                Log::warning('Usuario ya tiene cita programada', [
+                    'documento' => $request->tipo_documento . '-' . $request->numero_documento,
+                    'fecha_cita' => $request->fecha_cita,
+                    'cita_existente' => $citaExistente->numero_cita
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Ya tiene una cita programada para esta fecha'
                 ], 400);
             }
 
-            // Crear la cita
-            $cita = Cita::create([
+            // Preparar datos para crear la cita
+            $datosCita = [
                 'tramite_id' => $request->tramite_id,
                 'fecha_cita' => $request->fecha_cita,
                 'hora_cita' => $request->hora_cita,
@@ -246,6 +284,17 @@ class AgendamientoController extends Controller
                 'telefono' => $request->telefono,
                 'direccion' => $request->direccion,
                 'acepta_tratamiento_datos' => $request->acepta_tratamiento_datos,
+                'estado' => 'programada',
+            ];
+
+            Log::info('Creando cita con datos', $datosCita);
+
+            // Crear la cita
+            $cita = Cita::create($datosCita);
+
+            Log::info('Cita creada exitosamente', [
+                'cita_id' => $cita->id,
+                'numero_cita' => $cita->numero_cita
             ]);
 
             DB::commit();
@@ -256,12 +305,21 @@ class AgendamientoController extends Controller
                 'cita' => $cita->load(['tramite.area.secretaria']),
                 'numero_cita' => $cita->numero_cita
             ]);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
+
+            Log::error('Error al crear cita', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'data' => $request->except(['acepta_tratamiento_datos'])
+            ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error al agendar la cita. Por favor intente nuevamente.'
+                'message' => 'Error al agendar la cita. Por favor intente nuevamente.',
+                'debug' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }

@@ -1,6 +1,7 @@
 <!-- resources/views/agendamiento/comprobante-pdf.blade.php -->
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,30 +10,45 @@
         body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             color: #333;
             line-height: 1.4;
         }
-        
-        .header {
+
+        /* .header {
             text-align: center;
             border-bottom: 3px solid #2563eb;
             padding-bottom: 20px;
             margin-bottom: 30px;
+        } */
+
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #2563eb;
+            padding: 10px 20px 20px 20px;
+            /* espacio solo debajo y a los lados */
+            margin-bottom: 30px;
         }
-        
+
+        .header img {
+            display: block;
+            margin: 0 auto 10px auto;
+            /* centrado y con espacio abajo */
+            height: 100px;
+        }
+
         .header h1 {
             color: #2563eb;
             margin: 0;
             font-size: 24px;
         }
-        
+
         .header p {
             margin: 5px 0 0 0;
             color: #666;
             font-size: 14px;
         }
-        
+
         .numero-cita {
             background: #f3f4f6;
             border: 2px solid #2563eb;
@@ -41,27 +57,27 @@
             margin-bottom: 30px;
             border-radius: 8px;
         }
-        
+
         .numero-cita h2 {
             margin: 0;
             color: #2563eb;
             font-size: 20px;
         }
-        
+
         .numero-cita .numero {
             font-size: 24px;
             font-weight: bold;
             color: #1e40af;
             margin-top: 5px;
         }
-        
+
         .seccion {
             margin-bottom: 25px;
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 20px;
         }
-        
+
         .seccion h3 {
             margin: 0 0 15px 0;
             color: #374151;
@@ -69,16 +85,16 @@
             border-bottom: 1px solid #e5e7eb;
             padding-bottom: 5px;
         }
-        
+
         .info-grid {
             display: table;
             width: 100%;
         }
-        
+
         .info-row {
             display: table-row;
         }
-        
+
         .info-label {
             display: table-cell;
             font-weight: bold;
@@ -86,13 +102,13 @@
             padding: 8px 20px 8px 0;
             width: 40%;
         }
-        
+
         .info-value {
             display: table-cell;
             color: #1f2937;
             padding: 8px 0;
         }
-        
+
         .estado {
             display: inline-block;
             padding: 4px 12px;
@@ -101,40 +117,40 @@
             font-weight: bold;
             text-transform: uppercase;
         }
-        
+
         .estado-programada {
             background: #fef3c7;
             color: #92400e;
         }
-        
+
         .estado-confirmada {
             background: #dbeafe;
             color: #1e40af;
         }
-        
+
         .instrucciones {
             background: #f0f9ff;
             border-left: 4px solid #0ea5e9;
             padding: 15px;
             margin-top: 30px;
         }
-        
+
         .instrucciones h3 {
             margin: 0 0 10px 0;
             color: #0c4a6e;
             font-size: 16px;
         }
-        
+
         .instrucciones ul {
             margin: 0;
             padding-left: 20px;
         }
-        
+
         .instrucciones li {
             margin-bottom: 5px;
             color: #0c4a6e;
         }
-        
+
         .footer {
             margin-top: 40px;
             text-align: center;
@@ -143,7 +159,7 @@
             border-top: 1px solid #e5e7eb;
             padding-top: 20px;
         }
-        
+
         .qr-info {
             background: #f9fafb;
             border: 1px solid #d1d5db;
@@ -152,7 +168,7 @@
             margin-top: 20px;
             border-radius: 4px;
         }
-        
+
         .fecha-destacada {
             background: #ecfdf5;
             border: 2px solid #10b981;
@@ -161,13 +177,13 @@
             margin: 20px 0;
             border-radius: 8px;
         }
-        
+
         .fecha-destacada .fecha {
             font-size: 18px;
             font-weight: bold;
             color: #065f46;
         }
-        
+
         .fecha-destacada .hora {
             font-size: 24px;
             font-weight: bold;
@@ -176,10 +192,11 @@
         }
     </style>
 </head>
+
 <body>
     <div class="header">
+        <img src="{{ public_path('images/logo.png') }}" alt="Logo">
         <h1>COMPROBANTE DE CITA</h1>
-        <p>Sistema de Agendamiento de Citas</p>
         <p>Fecha de generación: {{ now()->format('d/m/Y H:i') }}</p>
     </div>
 
@@ -211,11 +228,11 @@
                 <div class="info-label">Teléfono:</div>
                 <div class="info-value">{{ $cita->telefono }}</div>
             </div>
-            @if($cita->direccion)
-            <div class="info-row">
-                <div class="info-label">Dirección:</div>
-                <div class="info-value">{{ $cita->direccion }}</div>
-            </div>
+            @if ($cita->direccion)
+                <div class="info-row">
+                    <div class="info-label">Dirección:</div>
+                    <div class="info-value">{{ $cita->direccion }}</div>
+                </div>
             @endif
         </div>
     </div>
@@ -235,11 +252,11 @@
                 <div class="info-label">Trámite:</div>
                 <div class="info-value">{{ $cita->tramite->nombre }}</div>
             </div>
-            @if($cita->tramite->descripcion)
-            <div class="info-row">
-                <div class="info-label">Descripción:</div>
-                <div class="info-value">{{ $cita->tramite->descripcion }}</div>
-            </div>
+            @if ($cita->tramite->descripcion)
+                <div class="info-row">
+                    <div class="info-label">Descripción:</div>
+                    <div class="info-value">{{ $cita->tramite->descripcion }}</div>
+                </div>
             @endif
             <div class="info-row">
                 <div class="info-label">Costo:</div>
@@ -255,7 +272,7 @@
     <div class="fecha-destacada">
         <div style="font-size: 14px; color: #065f46; margin-bottom: 5px;">FECHA Y HORA DE LA CITA</div>
         <div class="fecha">{{ $cita->fecha_cita->format('l, d \d\e F \d\e Y') }}</div>
-        <div class="hora">{{ $cita->hora_cita->format('H:i') }}</div>
+        <div class="hora">{{ $cita->hora_cita }}</div>
     </div>
 
     <div class="seccion">
@@ -273,20 +290,20 @@
                 <div class="info-label">Fecha de Creación:</div>
                 <div class="info-value">{{ $cita->created_at->format('d/m/Y H:i') }}</div>
             </div>
-            @if($cita->observaciones)
-            <div class="info-row">
-                <div class="info-label">Observaciones:</div>
-                <div class="info-value">{{ $cita->observaciones }}</div>
-            </div>
+            @if ($cita->observaciones)
+                <div class="info-row">
+                    <div class="info-label">Observaciones:</div>
+                    <div class="info-value">{{ $cita->observaciones }}</div>
+                </div>
             @endif
         </div>
     </div>
 
-    @if($cita->tramite->requisitos)
-    <div class="seccion">
-        <h3>Requisitos del Trámite</h3>
-        <div style="white-space: pre-line;">{{ $cita->tramite->requisitos }}</div>
-    </div>
+    @if ($cita->tramite->requisitos)
+        <div class="seccion">
+            <h3>Requisitos del Trámite</h3>
+            <div style="white-space: pre-line;">{{ $cita->tramite->requisitos }}</div>
+        </div>
     @endif
 
     <div class="instrucciones">
@@ -309,8 +326,8 @@
 
     <div class="footer">
         <p>Este comprobante es válido únicamente para la fecha y hora especificadas.</p>
-        <p>Generado automáticamente por el Sistema de Agendamiento de Citas</p>
-        <p>© {{ date('Y') }} - Todos los derechos reservados</p>
+        <p>© {{ date('Y') }} - Todos los derechos reservados Alcaldía de Puerto Boyacá</p>
     </div>
 </body>
+
 </html>
