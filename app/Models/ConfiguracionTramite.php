@@ -38,7 +38,7 @@ class ConfiguracionTramite extends Model
     ];
 
     // Horario de almuerzo configurables
-    const HORA_INICIO_ALMUERZO = '12:00';
+    const HORA_INICIO_ALMUERZO = '11:00';
     const HORA_FIN_ALMUERZO = '14:00';
 
     public function tramite(): BelongsTo
